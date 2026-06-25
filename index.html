@@ -444,7 +444,7 @@ function render(d){
   const a=d.aiReview;
   const bcls = a.status==="順調"?"good":a.status==="警戒"?"danger":"warn";
   document.getElementById("ai").innerHTML =
-    "<div class='top'><div class='ai-ic'>🤖</div><div class='ai-t'>AI総評（今日の診断）</div>"+
+    "<div class='top'><div class='ai-ic'>🤖</div><div class='ai-t'>AI総評（現時点の診断）</div>"+
     "<span class='badge "+bcls+"'>"+a.status+"</span></div>"+
     "<div class='hl'>"+a.headline+"</div>"+
     "<div class='body'>"+a.body+"</div>"+
@@ -452,7 +452,7 @@ function render(d){
       const tc = x.t==="短期"?"s":x.t==="中期"?"m":x.t==="長期"?"l":"m";
       return "<div class='a'><span class='term "+tc+"'>"+x.t+"</span><div>"+x.b+"</div></div>";
     }).join("")+"</div>"+
-    "<div class='sig'>🪵 Claude が "+d.asOf+" の数字を読んで作成（毎日自動更新）</div>";
+    "<div class='sig'>🪵 Claude が "+d.asOf+" 時点までの数字をもとに作成（毎日自動更新）</div>";
 
   // ---- KPI ----
   const kpis=[
