@@ -302,7 +302,7 @@ const pct = n => (n>=0?"+":"")+n.toFixed(1)+"%";
 const MON=["4月","5月","6月","7月","8月","9月","10月","11月","12月","1月","2月","3月"];
 
 /* ===== ログイン（GAS側でサーバー照合。認証OK時のみ数字を受け取る） ===== */
-const SESSION_KEY="nippou_session", DATA_KEY="nippou_data";
+const SESSION_KEY="nippou_session", DATA_KEY="nippou_data", CRED_KEY="nippou_cred";
 async function postGAS(payload){
   let lastErr;
   for(let i=0;i<3;i++){
@@ -326,6 +326,7 @@ async function doLogin(){
       SNAPSHOT=data.latest;
       sessionStorage.setItem(SESSION_KEY,e);
       sessionStorage.setItem(DATA_KEY,JSON.stringify(data.latest));
+      sessionStorage.setItem(CRED_KEY,JSON.stringify({e:e,p:p}));
       lerr.textContent=""; showApp();
     }else if(data.ok){
       lerr.textContent="ログインOK。ただし日報データがまだありません。";
@@ -336,7 +337,7 @@ async function doLogin(){
     lerr.textContent="接続エラー。通信環境を確認して再度お試しください。";
   }
 }
-function doLogout(){ sessionStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(DATA_KEY); location.reload(); }
+function doLogout(){ sessionStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(DATA_KEY); sessionStorage.removeItem(CRED_KEY); location.reload(); }
 
 /* ===== 原価率（直近実績ベース・ユーザー調整可・localStorage保存） ===== */
 const COST_KEY="nippou_costrate", COST_DEFAULT=43.2;
@@ -398,12 +399,23 @@ function showApp(){
   render(SNAPSHOT);
   initChat();
 }
-(function(){
-  if(sessionStorage.getItem(SESSION_KEY)){
-    const d=sessionStorage.getItem(DATA_KEY);
-    if(d){ try{ SNAPSHOT=JSON.parse(d); }catch(e){} }
-    if(SNAPSHOT) showApp();
-  }
+(async function(){
+  if(!sessionStorage.getItem(SESSION_KEY)) return;
+  const d=sessionStorage.getItem(DATA_KEY);
+  if(d){ try{ SNAPSHOT=JSON.parse(d); }catch(e){} }
+  if(SNAPSHOT) showApp();              // キャッシュで即表示
+  const c=sessionStorage.getItem(CRED_KEY);  // 背景で最新を取り直す
+  if(!c) return;
+  try{
+    const cred=JSON.parse(c);
+    const data=await postGAS({action:"login",email:cred.e,pass:cred.p});
+    if(data && data.ok && data.latest){
+      SNAPSHOT=data.latest;
+      sessionStorage.setItem(DATA_KEY,JSON.stringify(data.latest));
+      if(document.getElementById("app").classList.contains("hidden")) showApp();
+      else render(SNAPSHOT);
+    }
+  }catch(e){}
 })();
 
 /* ===== 描画 ===== */
