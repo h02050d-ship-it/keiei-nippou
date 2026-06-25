@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>株式会社林材木店 ｜ 経営日報</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="apple-touch-icon" href="favicon.svg">
+<meta name="theme-color" content="#1f9d57">
+<meta name="apple-mobile-web-app-title" content="経営日報">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+  :root{
+    --bg:#f5f7f5; --panel:#ffffff; --panel2:#f1f4f1; --line:#e3e8e3;
+    --ink:#1b241f; --sub:#6c7a70; --accent:#1f9d57; --accent-soft:#e9f6ef;
+    --brown:#9a6b3f; --brown-soft:#f5ede4;
+    --warn:#c4831c; --warn-soft:#fbf2e1; --danger:#d4453c; --danger-soft:#fbecea;
+    --good:#1f9d57; --shadow:0 1px 3px rgba(20,40,30,.06),0 1px 2px rgba(20,40,30,.04);
+    --radius:16px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,"Segoe UI","Hiragino Sans","Yu Gothic UI",sans-serif;
+       background:var(--bg);color:var(--ink);line-height:1.55;-webkit-font-smoothing:antialiased}
+  .hidden{display:none!important}
+  .moneybig{font-variant-numeric:tabular-nums}
+
+  /* ---- ログイン ---- */
+  #login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .loginbox{width:100%;max-width:360px;background:var(--panel);border:1px solid var(--line);
+            border-radius:var(--radius);padding:34px 26px;text-align:center;box-shadow:var(--shadow)}
+  .loginbox .logo{font-size:32px;margin-bottom:6px}
+  .loginbox h1{font-size:18px;font-weight:700;margin-bottom:4px}
+  .loginbox p{color:var(--sub);font-size:12px;margin-bottom:22px}
+  .loginbox input{width:100%;padding:12px 14px;margin-bottom:12px;background:#fff;
+        border:1px solid var(--line);border-radius:10px;color:var(--ink);font-size:14px}
+  .loginbox input:focus{outline:none;border-color:var(--accent)}
+  .loginbox button{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;
+        border-radius:10px;font-size:15px;font-weight:700;cursor:pointer}
+  .loginbox button:hover{filter:brightness(1.05)}
+  .loginerr{color:var(--danger);font-size:12px;min-height:16px;margin-bottom:8px}
+  .demo{margin-top:16px;font-size:11px;color:var(--sub);background:var(--panel2);
+        border:1px dashed var(--line);border-radius:8px;padding:8px 10px;line-height:1.6}
+
+  /* ---- ヘッダー ---- */
+  header{position:sticky;top:0;z-index:10;background:rgba(245,247,245,.9);backdrop-filter:blur(8px);
+         border-bottom:1px solid var(--line);padding:13px 18px;display:flex;align-items:center;gap:12px}
+  header .h-title{font-weight:700;font-size:15px}
+  header .h-sub{color:var(--sub);font-size:11px}
+  header .spacer{flex:1}
+  .pill{font-size:11px;color:var(--sub);background:var(--panel);border:1px solid var(--line);
+        padding:5px 10px;border-radius:999px;white-space:nowrap}
+  .logout{font-size:12px;color:var(--sub);background:var(--panel);border:1px solid var(--line);
+        border-radius:8px;padding:6px 10px;cursor:pointer}
+
+  main{max-width:1120px;margin:0 auto;padding:18px 16px 60px}
+  .section-title{font-size:12px;color:var(--sub);font-weight:700;letter-spacing:.04em;
+        margin:26px 4px 10px}
+  .grid{display:grid;gap:13px}
+  .kpis{grid-template-columns:repeat(auto-fit,minmax(176px,1fr))}
+  .two{grid-template-columns:1fr 1fr}
+  .twob{grid-template-columns:1.5fr 1fr}
+  @media(max-width:800px){.two,.twob{grid-template-columns:1fr}}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+        padding:16px 17px;box-shadow:var(--shadow)}
+  .card .label{font-size:12px;color:var(--sub);margin-bottom:6px;display:flex;align-items:center;gap:6px}
+  .card .val{font-size:23px;font-weight:800;letter-spacing:-.02em}
+  .card .val small{font-size:13px;font-weight:600;color:var(--sub);margin-left:3px}
+  .card .sub{font-size:11px;color:var(--sub);margin-top:5px}
+  .delta{font-size:12px;font-weight:700;margin-top:6px;display:inline-flex;align-items:center;gap:3px}
+  .delta.up{color:var(--good)} .delta.down{color:var(--danger)} .delta.flat{color:var(--sub)}
+  .tag{font-size:10px;padding:2px 7px;border-radius:999px;font-weight:700}
+  .tag.sokuho{background:#eaf3fb;color:#2b7fc0}
+  .tag.real{background:var(--brown-soft);color:var(--brown)}
+
+  /* ---- AI総評 ---- */
+  .ai{background:linear-gradient(135deg,#ffffff, #f3faf6);border:1px solid #cfe9da;
+      border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);margin-top:14px}
+  .ai .top{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  .ai .ai-ic{width:30px;height:30px;border-radius:8px;background:var(--accent);color:#fff;
+      display:flex;align-items:center;justify-content:center;font-size:16px}
+  .ai .ai-t{font-weight:800;font-size:15px}
+  .badge{font-size:11px;font-weight:800;padding:3px 11px;border-radius:999px}
+  .badge.warn{background:var(--warn-soft);color:var(--warn);border:1px solid #eed9b0}
+  .badge.good{background:var(--accent-soft);color:var(--accent);border:1px solid #bfe6d0}
+  .badge.danger{background:var(--danger-soft);color:var(--danger);border:1px solid #f0c4c0}
+  .ai .hl{font-weight:700;font-size:14.5px;margin-bottom:7px;color:#16321f}
+  .ai .body{font-size:13px;color:#33433a;margin-bottom:14px}
+  .ai .adv{display:grid;gap:8px}
+  .ai .adv .a{display:flex;gap:9px;align-items:flex-start;background:#fff;border:1px solid var(--line);
+      border-radius:11px;padding:10px 12px;font-size:12.5px}
+  .ai .adv .a .n{flex:0 0 20px;height:20px;border-radius:6px;background:var(--accent-soft);
+      color:var(--accent);font-weight:800;font-size:11px;display:flex;align-items:center;justify-content:center}
+  .ai .adv .a b{color:var(--ink)}
+  .ai .sig{font-size:10.5px;color:var(--sub);margin-top:11px;text-align:right}
+
+  /* ---- バー ---- */
+  .chartcard h3{font-size:14px;margin-bottom:2px}
+  .chartcard .cap{font-size:11px;color:var(--sub);margin-bottom:13px}
+  .legend{display:flex;gap:14px;font-size:11px;color:var(--sub);margin-bottom:8px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+  .barrow{display:grid;grid-template-columns:40px 1fr;gap:8px;align-items:center;margin-bottom:9px}
+  .barrow .m{font-size:11px;color:var(--sub);text-align:right}
+  .barpair{display:flex;flex-direction:column;gap:3px}
+  .bar{height:13px;border-radius:4px;position:relative;min-width:2px;transition:width .5s}
+  .bar.cur{background:linear-gradient(90deg,var(--accent),#46c281)}
+  .bar.prev{background:#d3dcd5}
+  .bar span{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:9px;color:#fff;white-space:nowrap}
+  .bar.prev span{color:var(--sub)}
+  .feerow{display:grid;grid-template-columns:92px 1fr 72px;gap:8px;align-items:center;margin-bottom:7px;font-size:12px}
+  .feerow .fn{color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .feebar{height:10px;background:var(--accent);border-radius:3px;min-width:2px}
+  .feerow .fa{text-align:right}
+
+  table.fin{width:100%;border-collapse:collapse;font-size:13px}
+  table.fin td{padding:9px 4px;border-bottom:1px solid var(--line)}
+  table.fin td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+  table.fin tr:last-child td{border-bottom:none}
+  table.fin .ind{color:var(--sub)}
+
+  .costctl{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--sub);
+           background:var(--brown-soft);border:1px solid #ecdcc8;border-radius:10px;padding:8px 11px;margin-bottom:11px}
+  .costctl input{width:62px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;
+           font-size:14px;font-weight:700;color:var(--ink);text-align:right;background:#fff}
+  .costctl input:focus{outline:none;border-color:var(--brown)}
+  .mini{font-size:10.5px;color:var(--brown);background:#fff;border:1px solid #ecdcc8;
+           border-radius:999px;padding:3px 9px;cursor:pointer}
+  .mini:hover{background:var(--brown-soft)}
+
+  /* 着地・損益分岐点 */
+  .bigfig{font-size:26px;font-weight:800;letter-spacing:-.02em;margin:2px 0}
+  .meter{height:9px;background:var(--panel2);border-radius:999px;overflow:hidden;margin:12px 0 6px}
+  .meter > i{display:block;height:100%;border-radius:999px}
+  .row2{display:flex;justify-content:space-between;font-size:11px;color:var(--sub);margin-top:3px}
+
+  .note{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--warn);
+        border-radius:12px;padding:13px 15px;font-size:12px;color:var(--sub);margin-top:14px;box-shadow:var(--shadow)}
+  .note b{color:var(--ink)}
+  .footer{text-align:center;color:var(--sub);font-size:11px;margin-top:30px}
+
+  /* ---- AIチャット ---- */
+  .chatfab{position:fixed;right:20px;bottom:20px;z-index:30;background:var(--accent);color:#fff;
+    border:none;border-radius:999px;padding:13px 18px;font-size:14px;font-weight:700;cursor:pointer;
+    box-shadow:0 6px 20px rgba(31,157,87,.35);display:flex;align-items:center;gap:7px}
+  .chatfab:hover{filter:brightness(1.05)}
+  .chatpanel{position:fixed;right:20px;bottom:20px;z-index:31;width:384px;max-width:calc(100vw - 32px);
+    height:564px;max-height:calc(100vh - 40px);background:var(--panel);border:1px solid var(--line);
+    border-radius:18px;box-shadow:0 14px 44px rgba(20,40,30,.20);display:flex;flex-direction:column;overflow:hidden}
+  .ch-head{display:flex;align-items:center;justify-content:space-between;padding:13px 15px;
+    background:linear-gradient(135deg,var(--accent),#179a52);color:#fff;font-weight:700;font-size:14px}
+  .ch-head button{background:rgba(255,255,255,.2);color:#fff;border:none;width:26px;height:26px;
+    border-radius:8px;cursor:pointer;font-size:14px}
+  .demobar{font-size:10.5px;color:var(--warn);background:var(--warn-soft);padding:6px 12px;
+    text-align:center;border-bottom:1px solid #eed9b0}
+  .ch-msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
+  .msg{max-width:86%;padding:10px 13px;border-radius:13px;font-size:13px;line-height:1.65}
+  .msg.u{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+  .msg.a{align-self:flex-start;background:var(--panel2);color:var(--ink);border-bottom-left-radius:4px;white-space:pre-wrap}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 8px}
+  .chip{font-size:11px;background:var(--accent-soft);color:var(--accent);border:1px solid #bfe6d0;
+    border-radius:999px;padding:6px 10px;cursor:pointer}
+  .chip:hover{filter:brightness(.97)}
+  .ch-input{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line)}
+  .ch-input input{flex:1;padding:9px 12px;border:1px solid var(--line);border-radius:10px;font-size:13px;color:var(--ink)}
+  .ch-input input:focus{outline:none;border-color:var(--accent)}
+  .ch-input button{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:0 16px;font-weight:700;cursor:pointer}
+  .sendact{align-self:flex-start;max-width:86%;margin-top:-4px}
+  .sendnote{font-size:10.5px;color:var(--sub);margin-bottom:4px}
+  .sendbtn{font-size:11px;color:var(--brown);background:var(--brown-soft);border:1px solid #ecdcc8;
+    border-radius:999px;padding:6px 11px;cursor:pointer;font-weight:700}
+  .sendbtn:hover{filter:brightness(.98)}
+</style>
+</head>
+<body>
+
+<!-- ============ ログイン ============ -->
+<div id="login">
+  <div class="loginbox">
+    <div class="logo">🪵</div>
+    <h1>株式会社林材木店</h1>
+    <p>経営日報ダッシュボード</p>
+    <div class="loginerr" id="lerr"></div>
+    <input id="email" type="text" placeholder="メールアドレス" autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()">
+    <input id="pass" type="password" placeholder="パスワード" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    <button onclick="doLogin()">ログイン</button>
+    <div class="demo">🔒 ログイン照合はサーバー側(GAS)で実行。財務数字はこのページに保存されず、認証OK時のみ取得します。<br>会社アカウント（共通パスワード）でログインしてください。</div>
+  </div>
+</div>
+
+<!-- ============ アプリ ============ -->
+<div id="app" class="hidden">
+  <header>
+    <div>
+      <div class="h-title">🪵 林材木店 経営日報</div>
+      <div class="h-sub" id="hsub">—</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="pill" id="asof">—</div>
+    <button class="logout" onclick="doLogout()">ログアウト</button>
+  </header>
+
+  <main>
+    <!-- AI総評 -->
+    <div class="ai" id="ai"></div>
+
+    <!-- KPI -->
+    <div class="section-title">経営の体温計（当期累計 2026年度・4/1〜）</div>
+    <div class="grid kpis" id="kpis"></div>
+
+    <!-- 着地見込・損益分岐点 -->
+    <div class="section-title">今後の指針 — 着地見込 ＆ 損益分岐点</div>
+    <div class="grid two">
+      <div class="card" id="landing"></div>
+      <div class="card" id="breakeven"></div>
+    </div>
+
+    <!-- 推移 & 資金 -->
+    <div class="section-title">月次推移 ／ 資金ポジション</div>
+    <div class="grid twob">
+      <div class="card chartcard">
+        <h3>売上高の月次推移（今期 vs 前期）</h3>
+        <div class="cap">記帳済みベース。6月は途中(〜25日)。</div>
+        <div class="legend"><span><i style="background:var(--accent)"></i>今期 2026</span><span><i style="background:#d3dcd5"></i>前期 2025</span></div>
+        <div id="trend"></div>
+      </div>
+      <div class="card">
+        <h3 style="font-size:14px;margin-bottom:12px">資金ポジション</h3>
+        <table class="fin" id="cashtbl"></table>
+      </div>
+    </div>
+
+    <!-- 実力値・販管費 -->
+    <div class="section-title">利益の実力チェック</div>
+    <div class="grid twob">
+      <div class="card">
+        <h3 style="font-size:14px;margin-bottom:8px">会計速報 vs 調整後の実力値（試算）</h3>
+        <div class="costctl">📊 直近の原価率
+          <input id="costRate" type="number" min="0" max="99" step="0.1" onchange="onCostRate()">
+          <span>%</span>
+          <button class="mini" onclick="resetCostRate()">前期実績 43.2% に戻す</button>
+        </div>
+        <table class="fin" id="realtbl"></table>
+      </div>
+      <div class="card chartcard">
+        <h3>販管費 内訳トップ（当期累計）</h3>
+        <div class="cap">金額の大きい順</div>
+        <div id="fees"></div>
+      </div>
+    </div>
+
+    <div class="note" id="caveat"></div>
+    <div class="footer">データ取得: マネーフォワード クラウド会計（公式MCP）／ AI総評は毎日の自動更新時にClaudeが生成 ／ 本ダッシュボードは試作版です</div>
+  </main>
+
+  <!-- AIチャット -->
+  <button class="chatfab" id="chatfab" onclick="toggleChat(true)">💬 AIに質問</button>
+  <div class="chatpanel hidden" id="chatpanel">
+    <div class="ch-head"><span>🤖 AI経営アシスタント</span><button onclick="toggleChat(false)">✕</button></div>
+    <div class="demobar">🔀 ハイブリッド：普段はオフライン即答（送信なし）。「Claudeに送る」を押した時だけ集計値を送信します。<br>※試作のため送信は未接続のデモです。</div>
+    <div class="ch-msgs" id="chmsgs"></div>
+    <div class="chips" id="chchips"></div>
+    <div class="ch-input">
+      <input id="chq" placeholder="経営数字について質問…" onkeydown="if(event.key==='Enter')sendChat()">
+      <button onclick="sendChat()">送信</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   日次スナップショット（2026-06-25 マネフォ実データ）
+   本番ではこのオブジェクトを GAS API から取得して差し替え。
+   aiReview は毎日の自動更新時に Claude が生成して埋め込む。
+   ========================================================= */
+/* 本番：データは GAS API から取得し、このファイルには財務数字を一切持たない
+   （公開リポジトリに数字を載せない＝ネット非公開厳守）。ログイン通過時のみ取得。 */
+const GAS_URL = "https://script.google.com/macros/s/AKfycbw4wRp48Y0B89JWbNB8nBOmybtvz4xztYWHoWTVlqX3mNFTZzdfPoaQHqvC5yQaIGxU/exec";
+let SNAPSHOT = null;
+
+/* ===== ユーティリティ ===== */
+const yen = n => "¥"+Math.round(n).toLocaleString("ja-JP");
+const man = n => (n<0?"−":"")+Math.abs(Math.round(n/10000)).toLocaleString("ja-JP")+"万";
+const pct = n => (n>=0?"+":"")+n.toFixed(1)+"%";
+const MON=["4月","5月","6月","7月","8月","9月","10月","11月","12月","1月","2月","3月"];
+
+/* ===== ログイン（GAS側でサーバー照合。認証OK時のみ数字を受け取る） ===== */
+const SESSION_KEY="nippou_session", DATA_KEY="nippou_data";
+async function doLogin(){
+  const e=document.getElementById("email").value.trim().toLowerCase();
+  const p=document.getElementById("pass").value.trim();
+  const lerr=document.getElementById("lerr");
+  if(!e||!p){ lerr.textContent="メールとパスワードを入力してください"; return; }
+  lerr.textContent="確認中…";
+  try{
+    const res=await fetch(GAS_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body:JSON.stringify({action:"login",email:e,pass:p})});
+    const data=await res.json();
+    if(data.ok && data.latest){
+      SNAPSHOT=data.latest;
+      sessionStorage.setItem(SESSION_KEY,e);
+      sessionStorage.setItem(DATA_KEY,JSON.stringify(data.latest));
+      lerr.textContent=""; showApp();
+    }else if(data.ok){
+      lerr.textContent="ログインOK。ただし日報データがまだありません。";
+    }else{
+      lerr.textContent="メールまたはパスワードが違います";
+    }
+  }catch(err){
+    lerr.textContent="接続エラー。通信環境を確認して再度お試しください。";
+  }
+}
+function doLogout(){ sessionStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(DATA_KEY); location.reload(); }
+
+/* ===== 原価率（直近実績ベース・ユーザー調整可・localStorage保存） ===== */
+const COST_KEY="nippou_costrate", COST_DEFAULT=43.2;
+function getCostRate(){ const v=parseFloat(localStorage.getItem(COST_KEY)); return (isFinite(v)&&v>0&&v<99)? v/100 : COST_DEFAULT/100; }
+function onCostRate(){ const v=parseFloat(document.getElementById("costRate").value);
+  if(isFinite(v)&&v>0&&v<99){ localStorage.setItem(COST_KEY,v); } render(SNAPSHOT); }
+function resetCostRate(){ localStorage.removeItem(COST_KEY); render(SNAPSHOT); }
+
+/* ===== AIチャット（試作はデモ応答。本番はGAS経由でClaude APIに集計値を送って回答） ===== */
+const SUGGEST=["資金繰りは大丈夫？","なぜ速報と実力で利益が違う？","黒字にするには月いくら必要？","売上が落ちている。どうすべき？"];
+function toggleChat(open){
+  document.getElementById("chatpanel").classList.toggle("hidden",!open);
+  document.getElementById("chatfab").classList.toggle("hidden",open);
+  const m=document.getElementById("chmsgs");
+  if(open && !m.dataset.init){
+    m.dataset.init="1";
+    addMsg("a","こんにちは。"+SNAPSHOT.asOf+"時点の経営数字を見ています。資金繰り・利益・損益分岐点・売上など、気になる点を聞いてください。");
+    document.getElementById("chchips").innerHTML=SUGGEST.map(s=>"<span class='chip' onclick=\"askChat('"+s+"')\">"+s+"</span>").join("");
+  }
+}
+function addMsg(role,text){ const m=document.getElementById("chmsgs"); const d=document.createElement("div");
+  d.className="msg "+role; d.textContent=text; m.appendChild(d); m.scrollTop=m.scrollHeight; }
+function sendChat(){ const i=document.getElementById("chq"); const q=i.value.trim(); if(!q)return; i.value=""; askChat(q); }
+function askChat(q){
+  addMsg("u",q);
+  setTimeout(()=>{ const r=answerDemo(q); addMsg("a",r.text); addSendAction(q,r.m); },260);
+}
+function addSendAction(q,matched){
+  const m=document.getElementById("chmsgs");
+  const wrap=document.createElement("div"); wrap.className="sendact";
+  if(!matched){ const n=document.createElement("div"); n.className="sendnote"; n.textContent="オフラインでは定型回答までです。深掘りはClaudeへ："; wrap.appendChild(n); }
+  const btn=document.createElement("button"); btn.className="sendbtn";
+  btn.textContent="🤖 Claudeに送って深掘り（集計値のみ送信）";
+  btn.onclick=()=>sendToClaude(q);
+  wrap.appendChild(btn); m.appendChild(wrap); m.scrollTop=m.scrollHeight;
+}
+function sendToClaude(q){
+  addMsg("u","🔼 Claudeに送信：「"+q+"」");
+  setTimeout(()=>addMsg("a","🔒（デモ）本番では、この質問と画面の集計値だけをGAS経由でClaude APIに暗号化送信し、自由に回答します。生の仕訳・取引先名は送りません。今は試作のため実送信は行っていません。"),320);
+}
+function answerDemo(q){
+  const d=SNAPSHOT,t=d.ytd,e=d.est;
+  const costRate=getCostRate(), grossRate=1-costRate;
+  const estOp=t.sales*grossRate - t.sgaTotal - e.deprPerMonth*3;
+  const breakMo=(e.fixedCostAnnual/grossRate)/12;
+  const loans=d.bs.shortLoan+d.bs.longLoan;
+  const runway=d.cashTotal/e.cashFixedMonthly;
+  const has=(...ks)=>ks.some(k=>q.indexOf(k)>=0);
+  if(has("資金","現預金","借入","繰り","キャッシュ","手形"))
+    return {m:true,text:"資金面は『余裕は厚くない』状況です。\n・現預金 "+man(d.cashTotal)+"（固定費の約"+runway.toFixed(1)+"ヶ月分）\n・借入 "+man(loans)+"（短期"+man(d.bs.shortLoan)+"＋長期"+man(d.bs.longLoan)+"）＋支払手形 "+man(d.bs.shiharaiTegata)+"\n打ち手：手形決済・借入返済の山と売掛回収("+man(d.bs.urikake)+")を毎月突き合わせ、現預金の下限ライン（例800万）を決めて切らさない運用を。"};
+  if(has("速報","実力","違","棚卸","償却","なぜ"))
+    return {m:true,text:"速報の営業利益("+man(t.opProfit)+")が高く見えるのは、期中に①棚卸（商品在庫の増減）②減価償却 が入っていないためです。商品は前期末"+man(d.bs.inventory)+"のまま動かず、原価が仕入だけ＝粗利が過大に出ます。\n原価率"+(costRate*100).toFixed(1)+"%・減価償却を補正した実力営業利益は約"+man(estOp)+"です。"};
+  if(has("黒字","損益分岐","いくら売","必要な売上","目標"))
+    return {m:true,text:"黒字に必要な売上（損益分岐点）は月 約"+man(breakMo)+"です。\n固定費 約"+man(e.fixedCostAnnual)+" ÷ 粗利率"+(grossRate*100).toFixed(1)+"% で算出。今の月商ペースはこれを下回っているので、①月商"+man(breakMo)+"超えを作る ②固定費（役員報酬・減価償却が重い）を見直す、のどちらか/両方が必要です。"};
+  if(has("売上","落ち","減","前年","回復"))
+    return {m:true,text:"売上は4-5月確定で前年比 "+pct((d.yoy.salesAprMay/d.yoy.prevSalesAprMay-1)*100)+"（"+man(d.yoy.salesAprMay)+"／前期"+man(d.yoy.prevSalesAprMay)+"）と弱含みです。\nまず『どこが落ちたか』の特定が先決：取引先別・商品別の前年比を出し、落ち込みの大きい上位1〜2件に絞って具体策（価格・提案・訪問）を打つのが効きます。※取引先別の分析は記帳データを足せば本ツールでも出せます。"};
+  return {m:false,text:"その質問はオフラインの定型回答の範囲外です。下のボタンでClaudeに送ると、最新の数字を踏まえて自由に回答します（送るのは集計値のみ）。"};
+}
+function showApp(){
+  document.getElementById("login").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
+  render(SNAPSHOT);
+}
+(function(){
+  if(sessionStorage.getItem(SESSION_KEY)){
+    const d=sessionStorage.getItem(DATA_KEY);
+    if(d){ try{ SNAPSHOT=JSON.parse(d); }catch(e){} }
+    if(SNAPSHOT) showApp();
+  }
+})();
+
+/* ===== 描画 ===== */
+function render(d){
+  const t=d.ytd, e=d.est;
+  document.getElementById("hsub").textContent="当期 "+d.fiscalYear+"年度（"+d.termStart+"〜2027-03-31）・3月決算";
+  document.getElementById("asof").textContent="📅 "+d.asOf+" 時点";
+
+  // ---- 原価率（直近実績ベース・調整可） ----
+  const costRate  = getCostRate();
+  const grossRate = 1 - costRate;
+  const ci=document.getElementById("costRate"); if(ci && document.activeElement!==ci) ci.value=(costRate*100).toFixed(1);
+
+  // ---- 派生計算 ----
+  const estGross = t.sales*grossRate;
+  const estDepr  = e.deprPerMonth*3;
+  const estOp    = estGross - t.sgaTotal - estDepr;
+  const yoyRate  = (d.yoy.salesAprMay/d.yoy.prevSalesAprMay-1)*100;
+  const landingSales = t.sales/d.daysElapsed*d.termDays;        // 単純ペース換算
+  const landingOp    = landingSales*grossRate - e.fixedCostAnnual;
+  const breakeven    = e.fixedCostAnnual/grossRate;             // 損益分岐点売上(年)
+  const breakevenMo  = breakeven/12;
+  const runway       = d.cashTotal/e.cashFixedMonthly;          // 現預金=固定費の何ヶ月分
+
+  // ---- AI総評 ----
+  const a=d.aiReview;
+  const bcls = a.status==="順調"?"good":a.status==="警戒"?"danger":"warn";
+  document.getElementById("ai").innerHTML =
+    "<div class='top'><div class='ai-ic'>🤖</div><div class='ai-t'>AI総評（今日の診断）</div>"+
+    "<span class='badge "+bcls+"'>"+a.status+"</span></div>"+
+    "<div class='hl'>"+a.headline+"</div>"+
+    "<div class='body'>"+a.body+"</div>"+
+    "<div class='adv'>"+a.advice.map((x,i)=>
+      "<div class='a'><div class='n'>"+(i+1)+"</div><div>【<b>"+x.t+"</b>】"+x.b+"</div></div>").join("")+"</div>"+
+    "<div class='sig'>🪵 Claude が "+d.asOf+" の数字を読んで作成（毎日自動更新）</div>";
+
+  // ---- KPI ----
+  const kpis=[
+    {label:"売上高（当期累計）", val:t.sales, delta:{rate:yoyRate, txt:"前年同期比(4-5月確定)"}},
+    {label:"営業利益（実力・試算）", val:estOp, tag:"real", sub:"速報"+man(t.opProfit)+"は棚卸/減価償却 未反映"},
+    {label:"現預金残高", val:d.cashTotal, sub:"固定費の約"+runway.toFixed(1)+"ヶ月分（現金支出ベース）"},
+    {label:"借入合計", val:d.bs.shortLoan+d.bs.longLoan, sub:"＋支払手形 "+man(d.bs.shiharaiTegata)+" / 売掛 "+man(d.bs.urikake)},
+  ];
+  document.getElementById("kpis").innerHTML = kpis.map(k=>{
+    let dl="";
+    if(k.delta){
+      const cls=k.delta.rate>0.5?"up":k.delta.rate<-0.5?"down":"flat";
+      const ar=k.delta.rate>0.5?"▲":k.delta.rate<-0.5?"▼":"→";
+      dl="<div class='delta "+cls+"'>"+ar+" "+pct(k.delta.rate)+" <span style='color:var(--sub);font-weight:400'>"+k.delta.txt+"</span></div>";
+    }
+    const tag=k.tag?"<span class='tag "+k.tag+"'>実力試算</span>":"";
+    return "<div class='card'><div class='label'>"+k.label+" "+tag+"</div>"+
+           "<div class='val moneybig'>"+yen(k.val)+" <small>("+man(k.val)+")</small></div>"+
+           (k.sub?"<div class='sub'>"+k.sub+"</div>":"")+dl+"</div>";
+  }).join("");
+
+  // ---- 着地見込 ----
+  const lcol = landingOp>=0?"var(--good)":"var(--danger)";
+  const landVsPrev = (landingSales/d.yoy.prevYearSales-1)*100;
+  document.getElementById("landing").innerHTML =
+    "<div class='label'>年間 着地見込（単純ペース換算・目安）</div>"+
+    "<div class='label' style='margin-top:8px;font-size:11px'>売上</div>"+
+    "<div class='bigfig'>"+yen(landingSales)+" <small style='font-size:13px;color:var(--sub)'>("+man(landingSales)+")</small></div>"+
+    "<div class='row2'><span>前期売上 "+man(d.yoy.prevYearSales)+"</span><span style='color:"+(landVsPrev<0?'var(--danger)':'var(--good)')+";font-weight:700'>"+pct(landVsPrev)+"</span></div>"+
+    "<div class='label' style='margin-top:14px;font-size:11px'>実力営業利益（着地見込）</div>"+
+    "<div class='bigfig' style='color:"+lcol+"'>"+yen(landingOp)+" <small style='font-size:13px'>("+man(landingOp)+")</small></div>"+
+    "<div class='sub' style='margin-top:6px'>※経過86日を単純に年換算。季節変動は未考慮の目安です。</div>";
+
+  // ---- 損益分岐点 ----
+  const paceMo = t.sales/d.daysElapsed*30.4;   // 今のおおよその月商ペース
+  const fillpct = Math.min(paceMo/breakevenMo*100,100);
+  const overShort = paceMo - breakevenMo;
+  document.getElementById("breakeven").innerHTML =
+    "<div class='label'>損益分岐点 売上（黒字に必要な売上・目安）</div>"+
+    "<div class='bigfig'>"+man(breakevenMo)+"<span style='font-size:14px;color:var(--sub);font-weight:600'> / 月</span></div>"+
+    "<div class='sub'>年換算 約"+man(breakeven)+"（前期の固定費水準ベース）</div>"+
+    "<div class='meter'><i style='width:"+fillpct+"%;background:"+(overShort>=0?'var(--good)':'var(--danger)')+"'></i></div>"+
+    "<div class='row2'><span>今の月商ペース "+man(paceMo)+"</span><span style='font-weight:700;color:"+(overShort>=0?'var(--good)':'var(--danger)')+"'>"+(overShort>=0?"+":"")+man(overShort)+"</span></div>"+
+    "<div class='sub' style='margin-top:10px'>前期は売上 "+man(d.yoy.prevYearSales)+" がこの分岐点を下回り営業赤字 "+man(d.yoy.prevYearOp)+"。<b style='color:var(--ink)'>月商1,000万超え</b>を作るか固定費を下げるかが分岐点。</div>";
+
+  // ---- 月次推移バー ----
+  const maxS=Math.max(...d.monthlySalesPrev,...d.monthlySalesCur);
+  document.getElementById("trend").innerHTML = MON.map((m,i)=>{
+    const cur=d.monthlySalesCur[i], prev=d.monthlySalesPrev[i];
+    const wc=cur? Math.max(cur/maxS*100,3):0;
+    const wp=prev?Math.max(prev/maxS*100,3):0;
+    return "<div class='barrow'><div class='m'>"+m+"</div><div class='barpair'>"+
+      (cur?"<div class='bar cur' style='width:"+wc+"%'><span>"+man(cur)+"</span></div>":"<div class='bar' style='width:0'></div>")+
+      (prev?"<div class='bar prev' style='width:"+wp+"%'><span>"+man(prev)+"</span></div>":"")+
+      "</div></div>";
+  }).join("");
+
+  // ---- 資金テーブル ----
+  const ct=[];
+  d.cash.forEach(c=>ct.push("<tr><td class='ind'>"+c[0]+"</td><td>"+yen(c[1])+"</td></tr>"));
+  ct.push("<tr><td><b>現預金 合計</b></td><td><b>"+yen(d.cashTotal)+"</b></td></tr>");
+  ct.push("<tr><td class='ind'>売掛金（回収予定）</td><td style='color:var(--good)'>"+yen(d.bs.urikake)+"</td></tr>");
+  ct.push("<tr><td class='ind'>支払手形（支払予定）</td><td style='color:var(--warn)'>"+yen(d.bs.shiharaiTegata)+"</td></tr>");
+  ct.push("<tr><td class='ind'>短期借入金</td><td style='color:var(--danger)'>"+yen(d.bs.shortLoan)+"</td></tr>");
+  ct.push("<tr><td class='ind'>長期借入金</td><td style='color:var(--danger)'>"+yen(d.bs.longLoan)+"</td></tr>");
+  ct.push("<tr><td class='ind'>商品（棚卸）</td><td>"+yen(d.bs.inventory)+"</td></tr>");
+  document.getElementById("cashtbl").innerHTML=ct.join("");
+
+  // ---- 実力値テーブル ----
+  const rt=[
+    ["売上高", t.sales, ""],
+    ["▲ 売上原価（速報＝仕入のみ）", -t.cogs, "sub"],
+    ["＝ 粗利（速報）", t.grossProfit, "b sokuho"],
+    ["［試算］売上原価 "+(costRate*100).toFixed(1)+"%で再計算", -(t.sales*costRate), "sub"],
+    ["＝ 粗利（実力試算）", estGross, "b real"],
+    ["▲ 販管費", -t.sgaTotal, "sub"],
+    ["▲ 減価償却 見込（月"+man(e.deprPerMonth)+"×3）", -estDepr, "sub"],
+    ["＝ 営業利益（実力試算）", estOp, "b real big"],
+  ];
+  document.getElementById("realtbl").innerHTML = rt.map(r=>{
+    const cls=r[2]||"", strong=cls.includes("b");
+    const col = cls.includes("real")?"var(--brown)":cls.includes("sokuho")?"#2b7fc0":"var(--ink)";
+    const v = (r[1]<0?"−":"")+yen(Math.abs(r[1]));
+    return "<tr><td class='"+(cls.includes('sub')?'ind':'')+"' style='"+(strong?'font-weight:700':'')+"'>"+r[0]+"</td>"+
+           "<td style='color:"+col+";"+(cls.includes('big')?'font-size:16px;':'')+(strong?'font-weight:800':'')+"'>"+v+"</td></tr>";
+  }).join("");
+
+  // ---- 販管費バー ----
+  const maxF=Math.max(...d.sga.map(f=>f[1]));
+  document.getElementById("fees").innerHTML = d.sga.map(f=>
+    "<div class='feerow'><div class='fn'>"+f[0]+"</div>"+
+    "<div class='feebar' style='width:"+(f[1]/maxF*100)+"%'></div>"+
+    "<div class='fa'>"+man(f[1])+"</div></div>").join("");
+
+  // ---- 注意書き ----
+  document.getElementById("caveat").innerHTML =
+    "<b>⚠️ この数字の読み方</b><br>"+
+    "・<b>速報</b>＝マネフォの期中の試算表そのまま。<b>棚卸と減価償却が期中に入っていない</b>ため、粗利・営業利益は実力より良く出ます（商品は前期末 "+man(d.bs.inventory)+" のまま）。<br>"+
+    "・<b>実力試算・着地・損益分岐点</b>＝直近実績の原価率 "+(costRate*100).toFixed(1)+"%（初期値は前期実績）・固定費・減価償却を前提にした目安で、確定値ではありません。原価率の入力欄を変えると全体が再計算されます。正確な年間減価償却（モルダー込み）が固まると精度が上がります。<br>"+
+    "・連携サービスが0件＝<b>自動取込でなく記帳ベース</b>。日報の鮮度は「記帳が進んだところまで」です。";
+}
+</script>
+</body>
+</html>
