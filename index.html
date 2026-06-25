@@ -169,6 +169,24 @@
   .sendbtn{font-size:11px;color:var(--brown);background:var(--brown-soft);border:1px solid #ecdcc8;
     border-radius:999px;padding:6px 11px;cursor:pointer;font-weight:700}
   .sendbtn:hover{filter:brightness(.98)}
+
+  /* インラインAIチャット（PC全幅・見やすさ重視） */
+  .chatcard-inline{padding:0;overflow:hidden}
+  .demobar2{font-size:11px;color:var(--warn);background:var(--warn-soft);padding:8px 16px;border-bottom:1px solid #eed9b0}
+  .ch-msgs2{padding:16px 18px;display:flex;flex-direction:column;gap:11px;min-height:120px;max-height:360px;overflow-y:auto}
+  .ch-msgs2 .msg{max-width:760px;font-size:13.5px}
+  .chatcard-inline .chips{padding:0 18px 6px}
+  .ch-input2{display:flex;gap:10px;padding:12px 18px;border-top:1px solid var(--line)}
+  .ch-input2 input{flex:1;padding:12px 15px;border:1px solid var(--line);border-radius:11px;font-size:14px;color:var(--ink)}
+  .ch-input2 input:focus{outline:none;border-color:var(--accent)}
+  .ch-input2 button{background:var(--accent);color:#fff;border:none;border-radius:11px;padding:0 26px;font-weight:700;cursor:pointer;font-size:14px}
+  .ch-input2 button:hover{filter:brightness(1.05)}
+
+  /* アドバイスの短期/中期/長期チップ */
+  .term{flex:0 0 auto;align-self:flex-start;font-size:11px;font-weight:800;padding:4px 12px;border-radius:999px;white-space:nowrap}
+  .term.s{background:var(--danger-soft);color:var(--danger)}
+  .term.m{background:var(--warn-soft);color:var(--warn)}
+  .term.l{background:var(--accent-soft);color:var(--accent)}
 </style>
 </head>
 <body>
@@ -202,6 +220,18 @@
   <main>
     <!-- AI総評 -->
     <div class="ai" id="ai"></div>
+
+    <!-- AIチャット（インライン・全幅） -->
+    <div class="section-title">🤖 AIに質問</div>
+    <div class="card chatcard-inline">
+      <div class="demobar2">🔀 普段はオフラインで即答（送信なし）。「Claudeに送る」を押した時だけ集計値を送信します（試作のため送信は未接続）。</div>
+      <div class="ch-msgs2" id="chmsgs"></div>
+      <div class="chips" id="chchips"></div>
+      <div class="ch-input2">
+        <input id="chq" placeholder="経営数字について質問…（例：資金繰りは大丈夫？ 黒字にするには月いくら必要？）" onkeydown="if(event.key==='Enter')sendChat()">
+        <button onclick="sendChat()">送信</button>
+      </div>
+    </div>
 
     <!-- KPI -->
     <div class="section-title">経営の体温計（当期累計 2026年度・4/1〜）</div>
@@ -252,18 +282,6 @@
     <div class="footer">データ取得: マネーフォワード クラウド会計（公式MCP）／ AI総評は毎日の自動更新時にClaudeが生成 ／ 本ダッシュボードは試作版です</div>
   </main>
 
-  <!-- AIチャット -->
-  <button class="chatfab" id="chatfab" onclick="toggleChat(true)">💬 AIに質問</button>
-  <div class="chatpanel hidden" id="chatpanel">
-    <div class="ch-head"><span>🤖 AI経営アシスタント</span><button onclick="toggleChat(false)">✕</button></div>
-    <div class="demobar">🔀 ハイブリッド：普段はオフライン即答（送信なし）。「Claudeに送る」を押した時だけ集計値を送信します。<br>※試作のため送信は未接続のデモです。</div>
-    <div class="ch-msgs" id="chmsgs"></div>
-    <div class="chips" id="chchips"></div>
-    <div class="ch-input">
-      <input id="chq" placeholder="経営数字について質問…" onkeydown="if(event.key==='Enter')sendChat()">
-      <button onclick="sendChat()">送信</button>
-    </div>
-  </div>
 </div>
 
 <script>
@@ -329,15 +347,12 @@ function resetCostRate(){ localStorage.removeItem(COST_KEY); render(SNAPSHOT); }
 
 /* ===== AIチャット（試作はデモ応答。本番はGAS経由でClaude APIに集計値を送って回答） ===== */
 const SUGGEST=["資金繰りは大丈夫？","なぜ速報と実力で利益が違う？","黒字にするには月いくら必要？","売上が落ちている。どうすべき？"];
-function toggleChat(open){
-  document.getElementById("chatpanel").classList.toggle("hidden",!open);
-  document.getElementById("chatfab").classList.toggle("hidden",open);
+function initChat(){
   const m=document.getElementById("chmsgs");
-  if(open && !m.dataset.init){
-    m.dataset.init="1";
-    addMsg("a","こんにちは。"+SNAPSHOT.asOf+"時点の経営数字を見ています。資金繰り・利益・損益分岐点・売上など、気になる点を聞いてください。");
-    document.getElementById("chchips").innerHTML=SUGGEST.map(s=>"<span class='chip' onclick=\"askChat('"+s+"')\">"+s+"</span>").join("");
-  }
+  if(!m || m.dataset.init) return;
+  m.dataset.init="1";
+  addMsg("a","こんにちは。"+SNAPSHOT.asOf+"時点の経営数字を見ています。資金繰り・利益・損益分岐点・売上など、気になる点を聞いてください。");
+  document.getElementById("chchips").innerHTML=SUGGEST.map(s=>"<span class='chip' onclick=\"askChat('"+s+"')\">"+s+"</span>").join("");
 }
 function addMsg(role,text){ const m=document.getElementById("chmsgs"); const d=document.createElement("div");
   d.className="msg "+role; d.textContent=text; m.appendChild(d); m.scrollTop=m.scrollHeight; }
@@ -381,6 +396,7 @@ function showApp(){
   document.getElementById("login").classList.add("hidden");
   document.getElementById("app").classList.remove("hidden");
   render(SNAPSHOT);
+  initChat();
 }
 (function(){
   if(sessionStorage.getItem(SESSION_KEY)){
@@ -420,8 +436,10 @@ function render(d){
     "<span class='badge "+bcls+"'>"+a.status+"</span></div>"+
     "<div class='hl'>"+a.headline+"</div>"+
     "<div class='body'>"+a.body+"</div>"+
-    "<div class='adv'>"+a.advice.map((x,i)=>
-      "<div class='a'><div class='n'>"+(i+1)+"</div><div>【<b>"+x.t+"</b>】"+x.b+"</div></div>").join("")+"</div>"+
+    "<div class='adv'>"+a.advice.map((x)=>{
+      const tc = x.t==="短期"?"s":x.t==="中期"?"m":x.t==="長期"?"l":"m";
+      return "<div class='a'><span class='term "+tc+"'>"+x.t+"</span><div>"+x.b+"</div></div>";
+    }).join("")+"</div>"+
     "<div class='sig'>🪵 Claude が "+d.asOf+" の数字を読んで作成（毎日自動更新）</div>";
 
   // ---- KPI ----
