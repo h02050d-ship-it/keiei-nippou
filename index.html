@@ -224,7 +224,7 @@
     <!-- AIチャット（インライン・全幅） -->
     <div class="section-title">🤖 AIに質問</div>
     <div class="card chatcard-inline">
-      <div class="demobar2">🔀 普段はオフラインで即答（送信なし）。「Claudeに送る」を押した時だけ集計値を送信します（試作のため送信は未接続）。</div>
+      <div class="demobar2">💬 質問するたび Claude（Opus 4.8）が最新の集計値を見て回答します。送るのは集計値のみ（生の仕訳・取引先名は送りません）。</div>
       <div class="ch-msgs2" id="chmsgs"></div>
       <div class="chips" id="chchips"></div>
       <div class="ch-input2">
@@ -360,38 +360,18 @@ function addMsg(role,text){ const m=document.getElementById("chmsgs"); const d=d
 function sendChat(){ const i=document.getElementById("chq"); const q=i.value.trim(); if(!q)return; i.value=""; askChat(q); }
 function askChat(q){
   addMsg("u",q);
-  setTimeout(()=>{ const r=answerDemo(q); addMsg("a",r.text); addSendAction(q,r.m); },260);
-}
-function addSendAction(q,matched){
   const m=document.getElementById("chmsgs");
-  const wrap=document.createElement("div"); wrap.className="sendact";
-  if(!matched){ const n=document.createElement("div"); n.className="sendnote"; n.textContent="オフラインでは定型回答までです。深掘りはClaudeへ："; wrap.appendChild(n); }
-  const btn=document.createElement("button"); btn.className="sendbtn";
-  btn.textContent="🤖 Claudeに送って深掘り（集計値のみ送信）";
-  btn.onclick=()=>sendToClaude(q);
-  wrap.appendChild(btn); m.appendChild(wrap); m.scrollTop=m.scrollHeight;
-}
-function sendToClaude(q){
-  addMsg("u","🔼 Claudeに送信：「"+q+"」");
-  setTimeout(()=>addMsg("a","🔒（デモ）本番では、この質問と画面の集計値だけをGAS経由でClaude APIに暗号化送信し、自由に回答します。生の仕訳・取引先名は送りません。今は試作のため実送信は行っていません。"),320);
-}
-function answerDemo(q){
-  const d=SNAPSHOT,t=d.ytd,e=d.est;
-  const costRate=getCostRate(), grossRate=1-costRate;
-  const estOp=t.sales*grossRate - t.sgaTotal - e.deprPerMonth*3;
-  const breakMo=(e.fixedCostAnnual/grossRate)/12;
-  const loans=d.bs.shortLoan+d.bs.longLoan;
-  const runway=d.cashTotal/e.cashFixedMonthly;
-  const has=(...ks)=>ks.some(k=>q.indexOf(k)>=0);
-  if(has("資金","現預金","借入","繰り","キャッシュ","手形"))
-    return {m:true,text:"資金面は『余裕は厚くない』状況です。\n・現預金 "+man(d.cashTotal)+"（固定費の約"+runway.toFixed(1)+"ヶ月分）\n・借入 "+man(loans)+"（短期"+man(d.bs.shortLoan)+"＋長期"+man(d.bs.longLoan)+"）＋支払手形 "+man(d.bs.shiharaiTegata)+"\n打ち手：手形決済・借入返済の山と売掛回収("+man(d.bs.urikake)+")を毎月突き合わせ、現預金の下限ライン（例800万）を決めて切らさない運用を。"};
-  if(has("速報","実力","違","棚卸","償却","なぜ"))
-    return {m:true,text:"速報の営業利益("+man(t.opProfit)+")が高く見えるのは、期中に①棚卸（商品在庫の増減）②減価償却 が入っていないためです。商品は前期末"+man(d.bs.inventory)+"のまま動かず、原価が仕入だけ＝粗利が過大に出ます。\n原価率"+(costRate*100).toFixed(1)+"%・減価償却を補正した実力営業利益は約"+man(estOp)+"です。"};
-  if(has("黒字","損益分岐","いくら売","必要な売上","目標"))
-    return {m:true,text:"黒字に必要な売上（損益分岐点）は月 約"+man(breakMo)+"です。\n固定費 約"+man(e.fixedCostAnnual)+" ÷ 粗利率"+(grossRate*100).toFixed(1)+"% で算出。今の月商ペースはこれを下回っているので、①月商"+man(breakMo)+"超えを作る ②固定費（役員報酬・減価償却が重い）を見直す、のどちらか/両方が必要です。"};
-  if(has("売上","落ち","減","前年","回復"))
-    return {m:true,text:"売上は4-5月確定で前年比 "+pct((d.yoy.salesAprMay/d.yoy.prevSalesAprMay-1)*100)+"（"+man(d.yoy.salesAprMay)+"／前期"+man(d.yoy.prevSalesAprMay)+"）と弱含みです。\nまず『どこが落ちたか』の特定が先決：取引先別・商品別の前年比を出し、落ち込みの大きい上位1〜2件に絞って具体策（価格・提案・訪問）を打つのが効きます。※取引先別の分析は記帳データを足せば本ツールでも出せます。"};
-  return {m:false,text:"その質問はオフラインの定型回答の範囲外です。下のボタンでClaudeに送ると、最新の数字を踏まえて自由に回答します（送るのは集計値のみ）。"};
+  const wait=document.createElement("div"); wait.className="msg a"; wait.style.opacity=".6"; wait.textContent="🤖 考え中…";
+  m.appendChild(wait); m.scrollTop=m.scrollHeight;
+  let cred={}; try{ cred=JSON.parse(sessionStorage.getItem(CRED_KEY)||"{}"); }catch(e){}
+  postGAS({action:"chat", email:cred.e, pass:cred.p, question:q}).then(function(d){
+    wait.remove();
+    if(d && d.ok){ addMsg("a", d.answer || "（回答が空でした）"); }
+    else if(d && d.error==="no_key"){ addMsg("a","🔧 AIチャットはまだ有効化されていません（APIキー登録後に使えるようになります）。"); }
+    else if(d && d.error==="auth"){ addMsg("a","ログインの有効期限が切れたかもしれません。一度ログアウト→再ログインしてください。"); }
+    else if(d && d.error==="api"){ addMsg("a","AIに一時的に接続できません（"+(d.detail||"")+"）。少し時間をおいて再度お試しください。"); }
+    else{ addMsg("a","接続に失敗しました。通信環境を確認して再度お試しください。"); }
+  }).catch(function(){ wait.remove(); addMsg("a","接続に失敗しました。再度お試しください。"); });
 }
 function showApp(){
   document.getElementById("login").classList.add("hidden");
