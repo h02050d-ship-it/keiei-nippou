@@ -234,7 +234,7 @@
     </div>
 
     <!-- KPI -->
-    <div class="section-title">経営の体温計（当期累計 2026年度・4/1〜）</div>
+    <div class="section-title" id="kpiTitle">経営の体温計（当期累計）</div>
     <div class="grid kpis" id="kpis"></div>
 
     <!-- 着地見込・損益分岐点 -->
@@ -403,6 +403,13 @@ function render(d){
   const t=d.ytd, e=d.est;
   document.getElementById("hsub").textContent="当期 "+d.fiscalYear+"年度（"+d.termStart+"〜2027-03-31）・3月決算";
   document.getElementById("asof").textContent="📅 "+d.asOf+" 時点";
+  (function(){
+    const fmt=function(s){ const p=String(s).split("-"); return (+p[1])+"/"+(+p[2]); };
+    const mo=(d.daysElapsed/30.44).toFixed(1);
+    const prog=Math.round(d.daysElapsed/d.termDays*100);
+    const el=document.getElementById("kpiTitle");
+    if(el) el.textContent="経営の体温計（当期累計："+fmt(d.termStart)+"〜"+fmt(d.asOf)+"・約"+mo+"ヶ月／"+d.daysElapsed+"日経過・年度の"+prog+"%）";
+  })();
 
   // ---- 原価率（直近実績ベース・調整可） ----
   const costRate  = getCostRate();
