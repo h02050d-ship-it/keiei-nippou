@@ -187,6 +187,11 @@
   .term.s{background:var(--danger-soft);color:var(--danger)}
   .term.m{background:var(--warn-soft);color:var(--warn)}
   .term.l{background:var(--accent-soft);color:var(--accent)}
+
+  /* チャット履歴の区切り */
+  .histnote{align-self:center;font-size:11px;color:var(--sub);background:var(--panel2);
+    border:1px solid var(--line);border-radius:999px;padding:4px 13px;margin:8px 0}
+  .ch-msgs2 .msg.u{white-space:pre-wrap}
 </style>
 </head>
 <body>
@@ -354,6 +359,26 @@ function initChat(){
   m.dataset.init="1";
   addMsg("a","こんにちは。"+SNAPSHOT.asOf+"時点の経営数字を見ています。資金繰り・利益・損益分岐点・売上など、気になる点を聞いてください。");
   document.getElementById("chchips").innerHTML=SUGGEST.map(s=>"<span class='chip' onclick=\"askChat('"+s+"')\">"+s+"</span>").join("");
+  loadChatHistory();
+}
+function loadChatHistory(){
+  let cred={}; try{ cred=JSON.parse(sessionStorage.getItem(CRED_KEY)||"{}"); }catch(e){}
+  if(!cred.e) return;
+  postGAS({action:"chatHistory", email:cred.e, pass:cred.p}).then(function(d){
+    if(!(d && d.ok && d.history && d.history.length)) return;
+    const m=document.getElementById("chmsgs");
+    const div=document.createElement("div"); div.className="histnote";
+    div.textContent="── これまでの質問履歴（"+d.history.length+"件）──";
+    m.appendChild(div);
+    d.history.forEach(function(h){
+      addMsg("u", (h.ts? "🕘 "+h.ts+"\n" : "")+h.q);
+      addMsg("a", h.a);
+    });
+    const cur=document.createElement("div"); cur.className="histnote";
+    cur.textContent="── ここから新しい質問 ──";
+    m.appendChild(cur);
+    m.scrollTop=m.scrollHeight;
+  }).catch(function(){});
 }
 function addMsg(role,text){ const m=document.getElementById("chmsgs"); const d=document.createElement("div");
   d.className="msg "+role; d.textContent=text; m.appendChild(d); m.scrollTop=m.scrollHeight; }
