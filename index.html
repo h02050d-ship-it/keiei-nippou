@@ -32,7 +32,7 @@
   .loginbox h1{font-size:18px;font-weight:700;margin-bottom:4px}
   .loginbox p{color:var(--sub);font-size:12px;margin-bottom:22px}
   .loginbox input{width:100%;padding:12px 14px;margin-bottom:12px;background:#fff;
-        border:1px solid var(--line);border-radius:10px;color:var(--ink);font-size:14px}
+        border:1px solid var(--line);border-radius:10px;color:var(--ink);font-size:16px}  /* 16px未満はiOSでズームされる */
   .loginbox input:focus{outline:none;border-color:var(--accent)}
   .loginbox button{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;
         border-radius:10px;font-size:15px;font-weight:700;cursor:pointer}
@@ -107,6 +107,7 @@
   .bar.prev{background:#d3dcd5}
   .bar span{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:9px;color:#fff;white-space:nowrap}
   .bar.prev span{color:var(--sub)}
+  .bar span.out{right:auto;left:calc(100% + 5px);color:var(--sub)}  /* 極小バーはラベルを右外へ */
   .feerow{display:grid;grid-template-columns:92px 1fr 72px;gap:8px;align-items:center;margin-bottom:7px;font-size:12px}
   .feerow .fn{color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .feebar{height:10px;background:var(--accent);border-radius:3px;min-width:2px}
@@ -120,8 +121,8 @@
 
   .costctl{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--sub);
            background:var(--brown-soft);border:1px solid #ecdcc8;border-radius:10px;padding:8px 11px;margin-bottom:11px}
-  .costctl input{width:62px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;
-           font-size:14px;font-weight:700;color:var(--ink);text-align:right;background:#fff}
+  .costctl input{width:66px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;
+           font-size:16px;font-weight:700;color:var(--ink);text-align:right;background:#fff}
   .costctl input:focus{outline:none;border-color:var(--brown)}
   .mini{font-size:10.5px;color:var(--brown);background:#fff;border:1px solid #ecdcc8;
            border-radius:999px;padding:3px 9px;cursor:pointer}
@@ -173,11 +174,11 @@
   /* インラインAIチャット（PC全幅・見やすさ重視） */
   .chatcard-inline{padding:0;overflow:hidden}
   .demobar2{font-size:11px;color:var(--warn);background:var(--warn-soft);padding:8px 16px;border-bottom:1px solid #eed9b0}
-  .ch-msgs2{padding:16px 18px;display:flex;flex-direction:column;gap:11px;min-height:120px;max-height:360px;overflow-y:auto}
+  .ch-msgs2{padding:16px 18px;display:flex;flex-direction:column;gap:11px;min-height:120px;max-height:360px;overflow-y:auto;overscroll-behavior:contain}
   .ch-msgs2 .msg{max-width:760px;font-size:13.5px}
   .chatcard-inline .chips{padding:0 18px 6px}
   .ch-input2{display:flex;gap:10px;padding:12px 18px;border-top:1px solid var(--line)}
-  .ch-input2 input{flex:1;padding:12px 15px;border:1px solid var(--line);border-radius:11px;font-size:14px;color:var(--ink)}
+  .ch-input2 input{flex:1;padding:12px 15px;border:1px solid var(--line);border-radius:11px;font-size:16px;color:var(--ink)}
   .ch-input2 input:focus{outline:none;border-color:var(--accent)}
   .ch-input2 button{background:var(--accent);color:#fff;border:none;border-radius:11px;padding:0 26px;font-weight:700;cursor:pointer;font-size:14px}
   .ch-input2 button:hover{filter:brightness(1.05)}
@@ -192,6 +193,12 @@
   .histnote{align-self:center;font-size:11px;color:var(--sub);background:var(--panel2);
     border:1px solid var(--line);border-radius:999px;padding:4px 13px;margin:8px 0}
   .ch-msgs2 .msg.u{white-space:pre-wrap}
+
+  /* スマホ: stickyヘッダーの折返しで画面を圧迫しない */
+  @media(max-width:480px){
+    header .h-sub{display:none}
+    .pill{font-size:10px;padding:4px 8px}
+  }
 </style>
 </head>
 <body>
@@ -203,8 +210,8 @@
     <h1>株式会社林材木店</h1>
     <p>経営日報ダッシュボード</p>
     <div class="loginerr" id="lerr"></div>
-    <input id="email" type="text" placeholder="メールアドレス" autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()">
-    <input id="pass" type="password" placeholder="パスワード" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    <input id="email" type="text" placeholder="メールアドレス" autocomplete="username" onkeydown="if(event.key==='Enter'&&!event.isComposing&&event.keyCode!==229)doLogin()">
+    <input id="pass" type="password" placeholder="パスワード" autocomplete="current-password" onkeydown="if(event.key==='Enter'&&!event.isComposing&&event.keyCode!==229)doLogin()">
     <button onclick="doLogin()">ログイン</button>
     <div class="demo">🔒 ログイン照合はサーバー側(GAS)で実行。財務数字はこのページに保存されず、認証OK時のみ取得します。<br>会社アカウント（共通パスワード）でログインしてください。</div>
   </div>
@@ -229,12 +236,12 @@
     <!-- AIチャット（インライン・全幅） -->
     <div class="section-title">🤖 AIに質問</div>
     <div class="card chatcard-inline">
-      <div class="demobar2">💬 質問するたび Claude（Opus 4.8）が最新の集計値を見て回答します。送るのは集計値のみ（生の仕訳・取引先名は送りません）。</div>
+      <div class="demobar2">💬 質問するたび Claude が最新の集計値を見て回答します。送るのは集計値のみ（生の仕訳・取引先名は送りません）。</div>
       <div class="ch-msgs2" id="chmsgs"></div>
       <div class="chips" id="chchips"></div>
       <div class="ch-input2">
-        <input id="chq" placeholder="経営数字について質問…（例：資金繰りは大丈夫？ 黒字にするには月いくら必要？）" onkeydown="if(event.key==='Enter')sendChat()">
-        <button onclick="sendChat()">送信</button>
+        <input id="chq" placeholder="経営数字について質問…（例：資金繰りは大丈夫？ 黒字にするには月いくら必要？）" onkeydown="if(event.key==='Enter'&&!event.isComposing&&event.keyCode!==229)sendChat()">
+        <button id="chsend" onclick="sendChat()">送信</button>
       </div>
     </div>
 
@@ -254,8 +261,8 @@
     <div class="grid twob">
       <div class="card chartcard">
         <h3>売上高の月次推移（今期 vs 前期）</h3>
-        <div class="cap">記帳済みベース。6月は途中(〜25日)。</div>
-        <div class="legend"><span><i style="background:var(--accent)"></i>今期 2026</span><span><i style="background:#d3dcd5"></i>前期 2025</span></div>
+        <div class="cap" id="trendCap">記帳済みベース。</div>
+        <div class="legend"><span><i style="background:var(--accent)"></i><span id="legendCur">今期</span></span><span><i style="background:#d3dcd5"></i><span id="legendPrev">前期</span></span></div>
         <div id="trend"></div>
       </div>
       <div class="card">
@@ -272,7 +279,7 @@
         <div class="costctl">📊 直近の原価率
           <input id="costRate" type="number" min="0" max="99" step="0.1" onchange="onCostRate()">
           <span>%</span>
-          <button class="mini" onclick="resetCostRate()">前期実績 43.2% に戻す</button>
+          <button class="mini" id="costResetBtn" onclick="resetCostRate()">前期実績に戻す</button>
         </div>
         <table class="fin" id="realtbl"></table>
       </div>
@@ -302,15 +309,16 @@ let SNAPSHOT = null;
 
 /* ===== ユーティリティ ===== */
 const yen = n => "¥"+Math.round(n).toLocaleString("ja-JP");
-const man = n => (n<0?"−":"")+Math.abs(Math.round(n/10000)).toLocaleString("ja-JP")+"万";
+const man = n => { const r=Math.round(n/10000); return (r<0?"−":"")+Math.abs(r).toLocaleString("ja-JP")+"万"; };
 const pct = n => (n>=0?"+":"")+n.toFixed(1)+"%";
 const MON=["4月","5月","6月","7月","8月","9月","10月","11月","12月","1月","2月","3月"];
 
 /* ===== ログイン（GAS側でサーバー照合。認証OK時のみ数字を受け取る） ===== */
 const SESSION_KEY="nippou_session", DATA_KEY="nippou_data", CRED_KEY="nippou_cred";
-async function postGAS(payload){
+async function postGAS(payload,tries){
+  tries=tries||3;
   let lastErr;
-  for(let i=0;i<3;i++){
+  for(let i=0;i<tries;i++){
     try{
       const res=await fetch(GAS_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},
         body:JSON.stringify(payload)});
@@ -346,13 +354,14 @@ function doLogout(){ sessionStorage.removeItem(SESSION_KEY); sessionStorage.remo
 
 /* ===== 原価率（直近実績ベース・ユーザー調整可・localStorage保存） ===== */
 const COST_KEY="nippou_costrate", COST_DEFAULT=43.2;
-function getCostRate(){ const v=parseFloat(localStorage.getItem(COST_KEY)); return (isFinite(v)&&v>0&&v<99)? v/100 : COST_DEFAULT/100; }
+function defaultCostRate(){ const c=SNAPSHOT&&SNAPSHOT.est&&SNAPSHOT.est.cogsRate; return (isFinite(c)&&c>0&&c<1)? c : COST_DEFAULT/100; }
+function getCostRate(){ const v=parseFloat(localStorage.getItem(COST_KEY)); return (isFinite(v)&&v>0&&v<99)? v/100 : defaultCostRate(); }
 function onCostRate(){ const v=parseFloat(document.getElementById("costRate").value);
   if(isFinite(v)&&v>0&&v<99){ localStorage.setItem(COST_KEY,v); } render(SNAPSHOT); }
 function resetCostRate(){ localStorage.removeItem(COST_KEY); render(SNAPSHOT); }
 
 /* ===== AIチャット（試作はデモ応答。本番はGAS経由でClaude APIに集計値を送って回答） ===== */
-const SUGGEST=["資金繰りは大丈夫？","なぜ速報と実力で利益が違う？","黒字にするには月いくら必要？","売上が落ちている。どうすべき？"];
+const SUGGEST=["資金繰りは大丈夫？","なぜ速報と実力で利益が違う？","黒字にするには月いくら必要？","売上を伸ばすには？"];
 function initChat(){
   const m=document.getElementById("chmsgs");
   if(!m || m.dataset.init) return;
@@ -367,36 +376,46 @@ function loadChatHistory(){
   postGAS({action:"chatHistory", email:cred.e, pass:cred.p}).then(function(d){
     if(!(d && d.ok && d.history && d.history.length)) return;
     const m=document.getElementById("chmsgs");
-    const div=document.createElement("div"); div.className="histnote";
-    div.textContent="── これまでの質問履歴（"+d.history.length+"件）──";
-    m.appendChild(div);
+    const frag=document.createDocumentFragment();
+    const head=document.createElement("div"); head.className="histnote";
+    head.textContent="── これまでの質問履歴（"+d.history.length+"件）──";
+    frag.appendChild(head);
     d.history.forEach(function(h){
-      addMsg("u", (h.ts? "🕘 "+h.ts+"\n" : "")+h.q);
-      addMsg("a", h.a);
+      const u=document.createElement("div"); u.className="msg u"; u.textContent=(h.ts? "🕘 "+h.ts+"\n" : "")+h.q; frag.appendChild(u);
+      const a=document.createElement("div"); a.className="msg a"; a.textContent=h.a||""; frag.appendChild(a);
     });
     const cur=document.createElement("div"); cur.className="histnote";
     cur.textContent="── ここから新しい質問 ──";
-    m.appendChild(cur);
+    frag.appendChild(cur);
+    // 履歴の到着が遅れても時系列が崩れないよう、常に挨拶メッセージの直後に挿入する
+    m.insertBefore(frag, m.firstChild ? m.firstChild.nextSibling : null);
     m.scrollTop=m.scrollHeight;
   }).catch(function(){});
 }
 function addMsg(role,text){ const m=document.getElementById("chmsgs"); const d=document.createElement("div");
-  d.className="msg "+role; d.textContent=text; m.appendChild(d); m.scrollTop=m.scrollHeight; }
-function sendChat(){ const i=document.getElementById("chq"); const q=i.value.trim(); if(!q)return; i.value=""; askChat(q); }
+  d.className="msg "+role; d.textContent=text;
+  const stick=m.scrollHeight-m.scrollTop-m.clientHeight<60;   // 履歴読み返し中は下に引き戻さない
+  m.appendChild(d); if(stick) m.scrollTop=m.scrollHeight; }
+let chatBusy=false;
+function setChatBusy(b){ chatBusy=b; const btn=document.getElementById("chsend");
+  if(btn){ btn.disabled=b; btn.style.opacity=b?".5":""; } }
+function sendChat(){ const i=document.getElementById("chq"); const q=i.value.trim(); if(!q||chatBusy)return; i.value=""; askChat(q); }
 function askChat(q){
+  if(chatBusy) return;                       // 応答待ち中の連打で多重課金しない
+  setChatBusy(true);
   addMsg("u",q);
   const m=document.getElementById("chmsgs");
   const wait=document.createElement("div"); wait.className="msg a"; wait.style.opacity=".6"; wait.textContent="🤖 考え中…";
   m.appendChild(wait); m.scrollTop=m.scrollHeight;
   let cred={}; try{ cred=JSON.parse(sessionStorage.getItem(CRED_KEY)||"{}"); }catch(e){}
-  postGAS({action:"chat", email:cred.e, pass:cred.p, question:q}).then(function(d){
-    wait.remove();
+  postGAS({action:"chat", email:cred.e, pass:cred.p, question:q}, 1).then(function(d){   // chatは再送しない（二重課金防止）
+    wait.remove(); setChatBusy(false);
     if(d && d.ok){ addMsg("a", d.answer || "（回答が空でした）"); }
     else if(d && d.error==="no_key"){ addMsg("a","🔧 AIチャットはまだ有効化されていません（APIキー登録後に使えるようになります）。"); }
     else if(d && d.error==="auth"){ addMsg("a","ログインの有効期限が切れたかもしれません。一度ログアウト→再ログインしてください。"); }
     else if(d && d.error==="api"){ addMsg("a","AIに一時的に接続できません（"+(d.detail||"")+"）。少し時間をおいて再度お試しください。"); }
     else{ addMsg("a","接続に失敗しました。通信環境を確認して再度お試しください。"); }
-  }).catch(function(){ wait.remove(); addMsg("a","接続に失敗しました。再度お試しください。"); });
+  }).catch(function(){ wait.remove(); setChatBusy(false); addMsg("a","接続に失敗しました。再度お試しください。"); });
 }
 function showApp(){
   document.getElementById("login").classList.add("hidden");
@@ -426,14 +445,23 @@ function showApp(){
 /* ===== 描画 ===== */
 function render(d){
   const t=d.ytd, e=d.est;
-  document.getElementById("hsub").textContent="当期 "+d.fiscalYear+"年度（"+d.termStart+"〜2027-03-31）・3月決算";
+  const days=Math.max(1, d.daysElapsed||1);                     // 期首(経過0日)のゼロ除算ガード
+  document.getElementById("hsub").textContent="当期 "+d.fiscalYear+"年度（"+d.termStart+"〜"+(d.fiscalYear+1)+"-03-31）・3月決算";
   document.getElementById("asof").textContent="📅 "+d.asOf+" 時点";
   (function(){
     const fmt=function(s){ const p=String(s).split("-"); return (+p[1])+"/"+(+p[2]); };
     const mo=(d.daysElapsed/30.44).toFixed(1);
-    const prog=Math.round(d.daysElapsed/d.termDays*100);
+    const prog=Math.round(d.daysElapsed/Math.max(1,d.termDays||365)*100);
     const el=document.getElementById("kpiTitle");
     if(el) el.textContent="経営の体温計（当期累計："+fmt(d.termStart)+"〜"+fmt(d.asOf)+"・約"+mo+"ヶ月／"+d.daysElapsed+"日経過・年度の"+prog+"%）";
+    const tp=String(d.asOf).split("-");
+    const tc=document.getElementById("trendCap");
+    if(tc) tc.textContent="記帳済みベース。"+(+tp[1])+"月は途中（〜"+(+tp[2])+"日）。";
+    const lc=document.getElementById("legendCur"), lp=document.getElementById("legendPrev");
+    if(lc) lc.textContent="今期 "+d.fiscalYear+"年度";
+    if(lp) lp.textContent="前期 "+(d.fiscalYear-1)+"年度";
+    const rb=document.getElementById("costResetBtn");
+    if(rb) rb.textContent="前期実績 "+(defaultCostRate()*100).toFixed(1)+"% に戻す";
   })();
 
   // ---- 原価率（直近実績ベース・調整可） ----
@@ -442,18 +470,24 @@ function render(d){
   const ci=document.getElementById("costRate"); if(ci && document.activeElement!==ci) ci.value=(costRate*100).toFixed(1);
 
   // ---- 派生計算 ----
+  const estMonths = (function(){                                // 期首月〜asOf月の経過月数（減価償却の計上月数）
+    const p1=String(d.termStart).split("-"), p2=String(d.asOf).split("-");
+    const m=(+p2[0]-+p1[0])*12+(+p2[1]-+p1[1])+1;
+    return (isFinite(m)&&m>0)? m : Math.max(1,Math.round(days/30.44));
+  })();
   const estGross = t.sales*grossRate;
-  const estDepr  = e.deprPerMonth*3;
+  const estDepr  = e.deprPerMonth*estMonths;
   const estOp    = estGross - t.sgaTotal - estDepr;
-  const yoyRate  = (d.yoy.salesAprMay/d.yoy.prevSalesAprMay-1)*100;
-  const landingSales = t.sales/d.daysElapsed*d.termDays;        // 単純ペース換算
+  const yoyRate  = d.yoy.prevSalesAprMay>0 ? (d.yoy.salesAprMay/d.yoy.prevSalesAprMay-1)*100 : 0;
+  const landingSales = t.sales/days*d.termDays;                 // 単純ペース換算
   const landingOp    = landingSales*grossRate - e.fixedCostAnnual;
   const breakeven    = e.fixedCostAnnual/grossRate;             // 損益分岐点売上(年)
   const breakevenMo  = breakeven/12;
-  const runway       = d.cashTotal/e.cashFixedMonthly;          // 現預金=固定費の何ヶ月分
+  const runway       = e.cashFixedMonthly>0 ? d.cashTotal/e.cashFixedMonthly : 0;  // 現預金=固定費の何ヶ月分
 
-  // ---- AI総評 ----
-  const a=d.aiReview;
+  // ---- AI総評（生成失敗した日でも画面全体を止めない） ----
+  const a=Object.assign({status:"注意",headline:"AI総評は本日未生成です",body:"",advice:[]}, d.aiReview||{});
+  if(!Array.isArray(a.advice)) a.advice=[];
   const bcls = a.status==="順調"?"good":a.status==="警戒"?"danger":"warn";
   document.getElementById("ai").innerHTML =
     "<div class='top'><div class='ai-ic'>🤖</div><div class='ai-t'>AI総評（現時点の診断）</div>"+
@@ -468,7 +502,7 @@ function render(d){
 
   // ---- KPI ----
   const kpis=[
-    {label:"売上高（当期累計）", val:t.sales, delta:{rate:yoyRate, txt:"前年同期比(4-5月確定)"}},
+    {label:"売上高（当期累計）", val:t.sales, delta:{rate:yoyRate, txt:"前年同期比("+(d.yoy.label||"直近確定2ヶ月")+")"}},
     {label:"営業利益（実力・試算）", val:estOp, tag:"real", sub:"速報"+man(t.opProfit)+"は棚卸/減価償却 未反映"},
     {label:"現預金残高", val:d.cashTotal, sub:"固定費の約"+runway.toFixed(1)+"ヶ月分（現金支出ベース）"},
     {label:"借入合計", val:d.bs.shortLoan+d.bs.longLoan, sub:"＋支払手形 "+man(d.bs.shiharaiTegata)+" / 売掛 "+man(d.bs.urikake)},
@@ -488,7 +522,7 @@ function render(d){
 
   // ---- 着地見込 ----
   const lcol = landingOp>=0?"var(--good)":"var(--danger)";
-  const landVsPrev = (landingSales/d.yoy.prevYearSales-1)*100;
+  const landVsPrev = d.yoy.prevYearSales>0 ? (landingSales/d.yoy.prevYearSales-1)*100 : 0;
   document.getElementById("landing").innerHTML =
     "<div class='label'>年間 着地見込（単純ペース換算・目安）</div>"+
     "<div class='label' style='margin-top:8px;font-size:11px'>売上</div>"+
@@ -496,10 +530,10 @@ function render(d){
     "<div class='row2'><span>前期売上 "+man(d.yoy.prevYearSales)+"</span><span style='color:"+(landVsPrev<0?'var(--danger)':'var(--good)')+";font-weight:700'>"+pct(landVsPrev)+"</span></div>"+
     "<div class='label' style='margin-top:14px;font-size:11px'>実力営業利益（着地見込）</div>"+
     "<div class='bigfig' style='color:"+lcol+"'>"+yen(landingOp)+" <small style='font-size:13px'>("+man(landingOp)+")</small></div>"+
-    "<div class='sub' style='margin-top:6px'>※経過86日を単純に年換算。季節変動は未考慮の目安です。</div>";
+    "<div class='sub' style='margin-top:6px'>※経過"+d.daysElapsed+"日を単純に年換算。固定費は前期水準ベース・季節変動は未考慮の目安です。</div>";
 
   // ---- 損益分岐点 ----
-  const paceMo = t.sales/d.daysElapsed*30.4;   // 今のおおよその月商ペース
+  const paceMo = t.sales/days*30.4;   // 今のおおよその月商ペース
   const fillpct = Math.min(paceMo/breakevenMo*100,100);
   const overShort = paceMo - breakevenMo;
   document.getElementById("breakeven").innerHTML =
@@ -508,7 +542,11 @@ function render(d){
     "<div class='sub'>年換算 約"+man(breakeven)+"（前期の固定費水準ベース）</div>"+
     "<div class='meter'><i style='width:"+fillpct+"%;background:"+(overShort>=0?'var(--good)':'var(--danger)')+"'></i></div>"+
     "<div class='row2'><span>今の月商ペース "+man(paceMo)+"</span><span style='font-weight:700;color:"+(overShort>=0?'var(--good)':'var(--danger)')+"'>"+(overShort>=0?"+":"")+man(overShort)+"</span></div>"+
-    "<div class='sub' style='margin-top:10px'>前期は売上 "+man(d.yoy.prevYearSales)+" がこの分岐点を下回り営業赤字 "+man(d.yoy.prevYearOp)+"。<b style='color:var(--ink)'>月商1,000万超え</b>を作るか固定費を下げるかが分岐点。</div>";
+    "<div class='sub' style='margin-top:10px'>"+
+      ((d.yoy.prevYearSales>0 && d.yoy.prevYearSales<breakeven && d.yoy.prevYearOp<0)
+        ? "前期は売上 "+man(d.yoy.prevYearSales)+" がこの分岐点を下回り営業赤字 "+man(d.yoy.prevYearOp)+"。"
+        : "前期実績：売上 "+man(d.yoy.prevYearSales)+"・営業利益 "+man(d.yoy.prevYearOp)+"。")+
+      "<b style='color:var(--ink)'>月商"+man(breakevenMo)+"超え</b>を作るか固定費を下げるかが分岐点。</div>";
 
   // ---- 月次推移バー ----
   const maxS=Math.max(...d.monthlySalesPrev,...d.monthlySalesCur);
@@ -517,8 +555,8 @@ function render(d){
     const wc=cur? Math.max(cur/maxS*100,3):0;
     const wp=prev?Math.max(prev/maxS*100,3):0;
     return "<div class='barrow'><div class='m'>"+m+"</div><div class='barpair'>"+
-      (cur?"<div class='bar cur' style='width:"+wc+"%'><span>"+man(cur)+"</span></div>":"<div class='bar' style='width:0'></div>")+
-      (prev?"<div class='bar prev' style='width:"+wp+"%'><span>"+man(prev)+"</span></div>":"")+
+      (cur?"<div class='bar cur' style='width:"+wc+"%'><span class='"+(wc<18?"out":"")+"'>"+man(cur)+"</span></div>":"<div class='bar' style='width:0'></div>")+
+      (prev?"<div class='bar prev' style='width:"+wp+"%'><span class='"+(wp<18?"out":"")+"'>"+man(prev)+"</span></div>":"")+
       "</div></div>";
   }).join("");
 
@@ -541,7 +579,7 @@ function render(d){
     ["［試算］売上原価 "+(costRate*100).toFixed(1)+"%で再計算", -(t.sales*costRate), "sub"],
     ["＝ 粗利（実力試算）", estGross, "b real"],
     ["▲ 販管費", -t.sgaTotal, "sub"],
-    ["▲ 減価償却 見込（月"+man(e.deprPerMonth)+"×3）", -estDepr, "sub"],
+    ["▲ 減価償却 見込（月"+man(e.deprPerMonth)+"×"+estMonths+"ヶ月）", -estDepr, "sub"],
     ["＝ 営業利益（実力試算）", estOp, "b real big"],
   ];
   document.getElementById("realtbl").innerHTML = rt.map(r=>{
@@ -562,9 +600,9 @@ function render(d){
   // ---- 注意書き ----
   document.getElementById("caveat").innerHTML =
     "<b>⚠️ この数字の読み方</b><br>"+
-    "・<b>速報</b>＝マネフォの期中の試算表そのまま。<b>棚卸と減価償却が期中に入っていない</b>ため、粗利・営業利益は実力より良く出ます（商品は前期末 "+man(d.bs.inventory)+" のまま）。<br>"+
+    "・<b>速報</b>＝マネフォの期中の試算表そのまま。<b>期中は棚卸と減価償却が試算表に反映されない</b>ため、粗利・営業利益は実力より良く出ます（商品の帳簿残高 "+man(d.bs.inventory)+"）。<br>"+
     "・<b>実力試算・着地・損益分岐点</b>＝直近実績の原価率 "+(costRate*100).toFixed(1)+"%（初期値は前期実績）・固定費・減価償却を前提にした目安で、確定値ではありません。原価率の入力欄を変えると全体が再計算されます。正確な年間減価償却（モルダー込み）が固まると精度が上がります。<br>"+
-    "・連携サービスが0件＝<b>自動取込でなく記帳ベース</b>。日報の鮮度は「記帳が進んだところまで」です。";
+    "・数字は<b>記帳が進んだところまで</b>が反映されます（自動連携を使っていない場合、日報の鮮度は記帳のタイミング次第です）。";
 }
 </script>
 </body>
