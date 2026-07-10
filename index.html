@@ -13,7 +13,7 @@
   :root{
     --bg:#f5f7f5; --panel:#ffffff; --panel2:#f1f4f1; --line:#e3e8e3;
     --ink:#1b241f; --sub:#6c7a70; --accent:#1f9d57; --accent-soft:#e9f6ef;
-    --brown:#9a6b3f; --brown-soft:#f5ede4;
+    --brown:#9a6b3f; --brown-soft:#f5ede4; --prev:#3d7fb5;
     --warn:#c4831c; --warn-soft:#fbf2e1; --danger:#d4453c; --danger-soft:#fbecea;
     --good:#1f9d57; --shadow:0 1px 3px rgba(20,40,30,.06),0 1px 2px rgba(20,40,30,.04);
     --radius:16px;
@@ -99,19 +99,21 @@
   .chartcard .cap{font-size:11px;color:var(--sub);margin-bottom:13px}
   .legend{display:flex;gap:14px;font-size:11px;color:var(--sub);margin-bottom:8px}
   .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
-  .barrow{display:grid;grid-template-columns:40px 1fr;gap:8px;align-items:center;margin-bottom:9px}
-  .barrow .m{font-size:11px;color:var(--sub);text-align:right}
-  .barpair{display:flex;flex-direction:column;gap:3px}
-  .bar{height:13px;border-radius:4px;position:relative;min-width:2px;transition:width .5s}
-  .bar.cur{background:linear-gradient(90deg,var(--accent),#46c281)}
-  .bar.prev{background:#d3dcd5}
-  .bar span{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:9px;color:#fff;white-space:nowrap}
-  .bar.prev span{color:var(--sub)}
-  .bar span.out{right:auto;left:calc(100% + 5px);color:var(--sub)}  /* 極小バーはラベルを右外へ */
-  .feerow{display:grid;grid-template-columns:92px 1fr 72px;gap:8px;align-items:center;margin-bottom:7px;font-size:12px}
-  .feerow .fn{color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .feebar{height:10px;background:var(--accent);border-radius:3px;min-width:2px}
-  .feerow .fa{text-align:right}
+  .barrow{display:grid;grid-template-columns:40px 1fr;gap:9px;align-items:center;margin-bottom:11px}
+  .barrow .m{font-size:11.5px;color:var(--ink);font-weight:600;text-align:right}
+  .barpair{display:flex;flex-direction:column;gap:4px}
+  .barline{display:flex;align-items:center;gap:7px}
+  .bar{height:14px;border-radius:0 4px 4px 0;min-width:3px;transition:width .5s;flex:0 0 auto}
+  .bar.cur{background:var(--accent)}
+  .bar.cur.part{background:repeating-linear-gradient(45deg,var(--accent) 0 5px,#6cc496 5px 10px)}  /* 斜線＝集計途中の月 */
+  .bar.prev{background:var(--prev);height:11px;opacity:.85}
+  .bv{font-size:11px;font-weight:700;color:var(--ink);white-space:nowrap;font-variant-numeric:tabular-nums}
+  .bv.prev{color:var(--sub);font-weight:600;font-size:10.5px}
+  .feerow{display:grid;grid-template-columns:92px 1fr 72px;gap:8px;align-items:center;margin-bottom:8px;font-size:12px}
+  .feerow .fn{color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .feetrack{background:var(--panel2);border-radius:0 4px 4px 0;overflow:hidden}
+  .feebar{height:12px;background:var(--brown);border-radius:0 4px 4px 0;min-width:3px}
+  .feerow .fa{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
 
   table.fin{width:100%;border-collapse:collapse;font-size:13px}
   table.fin td{padding:9px 4px;border-bottom:1px solid var(--line)}
@@ -262,7 +264,7 @@
       <div class="card chartcard">
         <h3>売上高の月次推移（今期 vs 前期）</h3>
         <div class="cap" id="trendCap">記帳済みベース。</div>
-        <div class="legend"><span><i style="background:var(--accent)"></i><span id="legendCur">今期</span></span><span><i style="background:#d3dcd5"></i><span id="legendPrev">前期</span></span></div>
+        <div class="legend"><span><i style="background:var(--accent)"></i><span id="legendCur">今期</span></span><span><i style="background:var(--prev)"></i><span id="legendPrev">前期</span></span><span><i style="background:repeating-linear-gradient(45deg,var(--accent) 0 3px,#6cc496 3px 6px)"></i>集計途中の月</span></div>
         <div id="trend"></div>
       </div>
       <div class="card">
@@ -548,15 +550,18 @@ function render(d){
         : "前期実績：売上 "+man(d.yoy.prevYearSales)+"・営業利益 "+man(d.yoy.prevYearOp)+"。")+
       "<b style='color:var(--ink)'>月商"+man(breakevenMo)+"超え</b>を作るか固定費を下げるかが分岐点。</div>";
 
-  // ---- 月次推移バー ----
+  // ---- 月次推移バー（数字は常にバーの右外＝読める。斜線＝集計途中の月） ----
   const maxS=Math.max(...d.monthlySalesPrev,...d.monthlySalesCur);
+  const curMonIdx=(+String(d.asOf).split("-")[1]-4+12)%12;      // 4月=0 の年度インデックス
   document.getElementById("trend").innerHTML = MON.map((m,i)=>{
     const cur=d.monthlySalesCur[i], prev=d.monthlySalesPrev[i];
-    const wc=cur? Math.max(cur/maxS*100,3):0;
-    const wp=prev?Math.max(prev/maxS*100,3):0;
+    if(!cur && !prev) return "";
+    const wc=cur? Math.max(cur/maxS*78,2):0;                    // ラベル分の右余白を確保
+    const wp=prev?Math.max(prev/maxS*78,2):0;
+    const part=(i===curMonIdx && cur)?" part":"";
     return "<div class='barrow'><div class='m'>"+m+"</div><div class='barpair'>"+
-      (cur?"<div class='bar cur' style='width:"+wc+"%'><span class='"+(wc<18?"out":"")+"'>"+man(cur)+"</span></div>":"<div class='bar' style='width:0'></div>")+
-      (prev?"<div class='bar prev' style='width:"+wp+"%'><span class='"+(wp<18?"out":"")+"'>"+man(prev)+"</span></div>":"")+
+      (cur?"<div class='barline'><div class='bar cur"+part+"' style='width:"+wc+"%'></div><span class='bv'>"+man(cur)+"</span></div>":"")+
+      (prev?"<div class='barline'><div class='bar prev' style='width:"+wp+"%'></div><span class='bv prev'>"+man(prev)+"</span></div>":"")+
       "</div></div>";
   }).join("");
 
@@ -568,7 +573,7 @@ function render(d){
   ct.push("<tr><td class='ind'>支払手形（支払予定）</td><td style='color:var(--warn)'>"+yen(d.bs.shiharaiTegata)+"</td></tr>");
   ct.push("<tr><td class='ind'>短期借入金</td><td style='color:var(--danger)'>"+yen(d.bs.shortLoan)+"</td></tr>");
   ct.push("<tr><td class='ind'>長期借入金</td><td style='color:var(--danger)'>"+yen(d.bs.longLoan)+"</td></tr>");
-  ct.push("<tr><td class='ind'>商品（棚卸）</td><td>"+yen(d.bs.inventory)+"</td></tr>");
+  ct.push("<tr><td class='ind'>商品（棚卸） <span style='font-size:10px;color:var(--warn);font-weight:700'>※前期末のまま・実在庫と差あり</span></td><td>"+yen(d.bs.inventory)+"</td></tr>");
   document.getElementById("cashtbl").innerHTML=ct.join("");
 
   // ---- 実力値テーブル ----
@@ -590,17 +595,18 @@ function render(d){
            "<td style='color:"+col+";"+(cls.includes('big')?'font-size:16px;':'')+(strong?'font-weight:800':'')+"'>"+v+"</td></tr>";
   }).join("");
 
-  // ---- 販管費バー ----
+  // ---- 販管費バー（茶＝コスト系。薄いトラックで比率が読みやすい） ----
   const maxF=Math.max(...d.sga.map(f=>f[1]));
   document.getElementById("fees").innerHTML = d.sga.map(f=>
     "<div class='feerow'><div class='fn'>"+f[0]+"</div>"+
-    "<div class='feebar' style='width:"+(f[1]/maxF*100)+"%'></div>"+
+    "<div class='feetrack'><div class='feebar' style='width:"+(f[1]/maxF*100)+"%'></div></div>"+
     "<div class='fa'>"+man(f[1])+"</div></div>").join("");
 
   // ---- 注意書き ----
   document.getElementById("caveat").innerHTML =
     "<b>⚠️ この数字の読み方</b><br>"+
-    "・<b>速報</b>＝マネフォの期中の試算表そのまま。<b>期中は棚卸と減価償却が試算表に反映されない</b>ため、粗利・営業利益は実力より良く出ます（商品の帳簿残高 "+man(d.bs.inventory)+"）。<br>"+
+    "・<b>在庫（商品 "+man(d.bs.inventory)+"）は期中の実際の増減が反映されていません。</b>会計上は前期末の棚卸残高のまま動かないため、実在庫とはズレている前提で見てください（決算の実地棚卸で確定します）。<br>"+
+    "・<b>速報</b>＝マネフォの期中の試算表そのまま。<b>期中は棚卸と減価償却が試算表に反映されない</b>ため、粗利・営業利益は実力より良く出ます。<br>"+
     "・<b>実力試算・着地・損益分岐点</b>＝直近実績の原価率 "+(costRate*100).toFixed(1)+"%（初期値は前期実績）・固定費・減価償却を前提にした目安で、確定値ではありません。原価率の入力欄を変えると全体が再計算されます。正確な年間減価償却（モルダー込み）が固まると精度が上がります。<br>"+
     "・数字は<b>記帳が進んだところまで</b>が反映されます（自動連携を使っていない場合、日報の鮮度は記帳のタイミング次第です）。";
 }
