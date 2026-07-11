@@ -58,6 +58,8 @@
   .grid{display:grid;gap:13px}
   .kpis{grid-template-columns:repeat(auto-fit,minmax(176px,1fr))}
   .two{grid-template-columns:1fr 1fr}
+  .three{grid-template-columns:1fr 1fr 1fr}
+  @media(max-width:800px){.three{grid-template-columns:1fr}}
   .twob{grid-template-columns:1.5fr 1fr}
   @media(max-width:800px){.two,.twob{grid-template-columns:1fr}}
 
@@ -114,6 +116,7 @@
   .feetrack{background:var(--panel2);border-radius:0 4px 4px 0;overflow:hidden}
   .feebar{height:12px;background:var(--brown);border-radius:0 4px 4px 0;min-width:3px}
   .feerow .fa{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+  .feerow .fa .yoy{display:block;font-size:9.5px;font-weight:700;line-height:1.3}
 
   table.fin{width:100%;border-collapse:collapse;font-size:13px}
   table.fin td{padding:9px 4px;border-bottom:1px solid var(--line)}
@@ -236,11 +239,12 @@
     <div class="section-title" id="kpiTitle">経営の体温計（当期累計）</div>
     <div class="grid kpis" id="kpis"></div>
 
-    <!-- 着地見込・損益分岐点 -->
-    <div class="section-title">今後の指針 — 着地見込 ＆ 損益分岐点</div>
-    <div class="grid two">
+    <!-- 着地見込・損益分岐点・今月の進捗 -->
+    <div class="section-title">今後の指針 — 着地見込 ＆ 損益分岐点 ＆ 今月の進捗</div>
+    <div class="grid three">
       <div class="card" id="landing"></div>
       <div class="card" id="breakeven"></div>
+      <div class="card" id="monthprog"></div>
     </div>
 
     <!-- 推移 & 資金 -->
@@ -310,6 +314,7 @@
    （公開リポジトリに数字を載せない＝ネット非公開厳守）。ログイン通過時のみ取得。 */
 const GAS_URL = "https://script.google.com/macros/s/AKfycbw4wRp48Y0B89JWbNB8nBOmybtvz4xztYWHoWTVlqX3mNFTZzdfPoaQHqvC5yQaIGxU/exec";
 let SNAPSHOT = null;
+let HISTORY  = [];   // 日次スナップショットの履歴（前日比・週間デルタ用）
 
 /* ===== ユーティリティ ===== */
 const yen = n => "¥"+Math.round(n).toLocaleString("ja-JP");
@@ -341,8 +346,10 @@ async function doLogin(){
     const data=await postGAS({action:"login",email:e,pass:p});
     if(data.ok && data.latest){
       SNAPSHOT=data.latest;
+      HISTORY=data.history||[];
       sessionStorage.setItem(SESSION_KEY,e);
       sessionStorage.setItem(DATA_KEY,JSON.stringify(data.latest));
+      try{ sessionStorage.setItem("nippou_hist",JSON.stringify(HISTORY)); }catch(e2){}
       sessionStorage.setItem(CRED_KEY,JSON.stringify({e:e,p:p}));
       lerr.textContent=""; showApp();
     }else if(data.ok){
@@ -431,6 +438,7 @@ function showApp(){
   if(!sessionStorage.getItem(SESSION_KEY)) return;
   const d=sessionStorage.getItem(DATA_KEY);
   if(d){ try{ SNAPSHOT=JSON.parse(d); }catch(e){} }
+  try{ HISTORY=JSON.parse(sessionStorage.getItem("nippou_hist")||"[]"); }catch(e){ HISTORY=[]; }
   if(SNAPSHOT) showApp();              // キャッシュで即表示
   const c=sessionStorage.getItem(CRED_KEY);  // 背景で最新を取り直す
   if(!c) return;
@@ -439,7 +447,9 @@ function showApp(){
     const data=await postGAS({action:"login",email:cred.e,pass:cred.p});
     if(data && data.ok && data.latest){
       SNAPSHOT=data.latest;
+      HISTORY=data.history||[];
       sessionStorage.setItem(DATA_KEY,JSON.stringify(data.latest));
+      try{ sessionStorage.setItem("nippou_hist",JSON.stringify(HISTORY)); }catch(e2){}
       if(document.getElementById("app").classList.contains("hidden")) showApp();
       else render(SNAPSHOT);
     }
@@ -504,11 +514,33 @@ function render(d){
     }).join("")+"</div>"+
     "<div class='sig'>🪵 Claude が "+d.asOf+" 時点までの数字をもとに作成（毎日自動更新）</div>";
 
+  // ---- 前回記帳比・週間デルタ（スナップショット履歴から） ----
+  const fmtMD=s=>{ const p=String(s).split("-"); return (+p[1])+"/"+(+p[2]); };
+  const hLast=HISTORY.length? HISTORY[HISTORY.length-1] : null;
+  const prevSnap=(hLast && hLast.asOf===d.asOf && HISTORY.length>=2)? HISTORY[HISTORY.length-2] : null;
+  let weekSnap=null;
+  if(hLast && hLast.asOf===d.asOf){
+    const curDate=new Date(d.asOf);
+    for(let i=HISTORY.length-2;i>=0;i--){ if((curDate-new Date(HISTORY[i].asOf))/86400000>=6.5){ weekSnap=HISTORY[i]; break; } }
+  }
+  function moveHTML(diff, lbl, goodUp){
+    if(diff==null || !isFinite(diff)) return "";
+    const flat=Math.abs(diff)<10000;
+    const cls=flat?"flat":((diff>0)===goodUp?"up":"down");
+    const ar=flat?"→":diff>0?"▲":"▼";
+    return "<div class='delta "+cls+"'>"+ar+" "+(diff>=0?"+":"−")+man(Math.abs(diff))+" <span style='color:var(--sub);font-weight:400'>"+lbl+"</span></div>";
+  }
+  const dSales=prevSnap? t.sales-prevSnap.ytd.sales : null;
+  const dCash =prevSnap? d.cashTotal-prevSnap.cashTotal : null;
+  const wCash =weekSnap? d.cashTotal-weekSnap.cashTotal : null;
+
   // ---- KPI ----
   const kpis=[
-    {label:"売上高（当期累計）", val:t.sales, delta:{rate:yoyRate, txt:"前年同期比("+(d.yoy.label||"直近確定2ヶ月")+")"}},
+    {label:"売上高（当期累計）", val:t.sales, delta:{rate:yoyRate, txt:"前年同期比("+(d.yoy.label||"直近確定2ヶ月")+")"},
+     extra: prevSnap? moveHTML(dSales,"前回記帳("+fmtMD(prevSnap.asOf)+")から",true) : ""},
     {label:"営業利益（実力・試算）", val:estOp, tag:"real", signColor:true, sub:"速報"+man(t.opProfit)+"は棚卸/減価償却 未反映"},
-    {label:"現預金残高", val:d.cashTotal, sub:"固定費の約"+runway.toFixed(1)+"ヶ月分（現金支出ベース）"},
+    {label:"現預金残高", val:d.cashTotal, sub:"固定費の約"+runway.toFixed(1)+"ヶ月分（現金支出ベース）",
+     extra:(prevSnap? moveHTML(dCash,"前回("+fmtMD(prevSnap.asOf)+")から",true):"")+(weekSnap? moveHTML(wCash,"1週間("+fmtMD(weekSnap.asOf)+")から",true):"")},
     {label:"借入合計", val:d.bs.shortLoan+d.bs.longLoan, loan:true, sub:"＋支払手形 "+man(d.bs.shiharaiTegata)+" / 売掛 "+man(d.bs.urikake)},
   ];
   document.getElementById("kpis").innerHTML = kpis.map(k=>{
@@ -523,7 +555,7 @@ function render(d){
     const vcol = k.val<0 ? "var(--danger)" : k.signColor ? "var(--good)" : k.loan ? "var(--danger)" : "var(--ink)";
     return "<div class='card'><div class='label'>"+k.label+" "+tag+"</div>"+
            "<div class='val moneybig' style='color:"+vcol+"'>"+yen(k.val)+" <small>("+man(k.val)+")</small></div>"+
-           (k.sub?"<div class='sub'>"+k.sub+"</div>":"")+dl+"</div>";
+           (k.sub?"<div class='sub'>"+k.sub+"</div>":"")+dl+(k.extra||"")+"</div>";
   }).join("");
 
   // ---- 着地見込 ----
@@ -553,6 +585,25 @@ function render(d){
         ? "前期は売上 "+man(d.yoy.prevYearSales)+" がこの分岐点を下回り営業赤字 "+man(d.yoy.prevYearOp)+"。"
         : "前期実績：売上 "+man(d.yoy.prevYearSales)+"・営業利益 "+man(d.yoy.prevYearOp)+"。")+
       "<b style='color:var(--ink)'>月商"+man(breakevenMo)+"超え</b>を作るか固定費を下げるかが分岐点。</div>";
+
+  // ---- 今月の進捗（損益分岐点の必要月商に対して） ----
+  (function(){
+    const el=document.getElementById("monthprog"); if(!el) return;
+    const mi=(+String(d.asOf).split("-")[1]-4+12)%12;
+    const curMonSales=d.monthlySalesCur[mi]||0;
+    const dayOfMon=+String(d.asOf).split("-")[2];
+    const monName=(+String(d.asOf).split("-")[1])+"月";
+    const monPct=Math.min(curMonSales/breakevenMo*100,100);
+    const monGap=breakevenMo-curMonSales;
+    el.innerHTML=
+      "<div class='label'>今月の進捗 — "+monName+"売上 vs 必要月商</div>"+
+      "<div class='bigfig'>"+man(curMonSales)+"<span style='font-size:14px;color:var(--sub);font-weight:600'> / "+man(breakevenMo)+"</span></div>"+
+      "<div class='sub'>"+monName+dayOfMon+"日時点・記帳ベース</div>"+
+      "<div class='meter'><i style='width:"+monPct+"%;background:"+(monGap<=0?'var(--good)':'var(--accent)')+"'></i></div>"+
+      "<div class='row2'><span>達成率 "+Math.round(curMonSales/breakevenMo*100)+"%</span>"+
+      "<span style='font-weight:700;color:"+(monGap<=0?'var(--good)':'var(--ink)')+"'>"+(monGap<=0? "分岐点クリア +"+man(-monGap) : "あと "+man(monGap))+"</span></div>"+
+      "<div class='sub' style='margin-top:10px'>黒字に必要な月商（分岐点）に対して、今月の記帳済み売上がどこまで来たか。</div>";
+  })();
 
   // ---- 月次推移バー（数字は常にバーの右外＝読める。斜線＝集計途中の月） ----
   const maxS=Math.max(...d.monthlySalesPrev,...d.monthlySalesCur);
@@ -609,11 +660,16 @@ function render(d){
   ];
   const sgaGroup=name=>SGA_GROUPS.find(g=>g.re.test(name));
   const maxF=Math.max(...d.sga.map(f=>f[1]));
+  const sgaPrevMap={}; (d.sgaPrev||[]).forEach(x=>{ sgaPrevMap[x[0]]=x[1]; });
   document.getElementById("fees").innerHTML = d.sga.map(f=>{
     const g=sgaGroup(f[0]);
+    const pv=sgaPrevMap[f[0]]; let yoyHtml="";
+    if(pv>0){ const r=(f[1]/pv-1)*100;
+      const col=r>3?"var(--warn)":r<-3?"var(--good)":"var(--sub)";   // コスト増=注意色/減=良
+      yoyHtml="<span class='yoy' style='color:"+col+"'>"+(r>=0?"+":"")+r.toFixed(0)+"% 前年比</span>"; }
     return "<div class='feerow'><div class='fn'>"+f[0]+"</div>"+
     "<div class='feetrack'><div class='feebar' style='width:"+(f[1]/maxF*100)+"%;background:"+g.color+"'></div></div>"+
-    "<div class='fa'>"+man(f[1])+"</div></div>";}).join("");
+    "<div class='fa'>"+man(f[1])+yoyHtml+"</div></div>";}).join("");
   const gUsed=SGA_GROUPS.filter(g=>d.sga.some(f=>sgaGroup(f[0])===g));
   const fl=document.getElementById("feesLegend");
   if(fl) fl.innerHTML=gUsed.map(g=>"<span><i style='background:"+g.color+"'></i>"+g.name+"</span>").join("");
