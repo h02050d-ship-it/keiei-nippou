@@ -232,21 +232,6 @@
   </header>
 
   <main>
-    <!-- AI総評 -->
-    <div class="ai" id="ai"></div>
-
-    <!-- AIチャット（インライン・全幅） -->
-    <div class="section-title">🤖 AIに質問</div>
-    <div class="card chatcard-inline">
-      <div class="demobar2">💬 質問するたび Claude が最新の集計値を見て回答します。送るのは集計値のみ（生の仕訳・取引先名は送りません）。<b>／ 目安：1問あたり約3〜5円（AI利用料・長い回答で最大10円ほど）</b></div>
-      <div class="ch-msgs2" id="chmsgs"></div>
-      <div class="chips" id="chchips"></div>
-      <div class="ch-input2">
-        <input id="chq" placeholder="経営数字について質問…（例：資金繰りは大丈夫？ 黒字にするには月いくら必要？）" onkeydown="if(event.key==='Enter'&&!event.isComposing&&event.keyCode!==229)sendChat()">
-        <button id="chsend" onclick="sendChat()">送信</button>
-      </div>
-    </div>
-
     <!-- KPI -->
     <div class="section-title" id="kpiTitle">経営の体温計（当期累計）</div>
     <div class="grid kpis" id="kpis"></div>
@@ -289,6 +274,22 @@
         <h3>販管費 内訳トップ（当期累計）</h3>
         <div class="cap">金額の大きい順</div>
         <div id="fees"></div>
+      </div>
+    </div>
+
+    <!-- AI分析（総評） -->
+    <div class="section-title">🤖 AI分析</div>
+    <div class="ai" id="ai" style="margin-top:0"></div>
+
+    <!-- AIチャット（インライン・全幅） -->
+    <div class="section-title">🤖 AIに質問</div>
+    <div class="card chatcard-inline">
+      <div class="demobar2">💬 質問するたび Claude が最新の集計値を見て回答します。送るのは集計値のみ（生の仕訳・取引先名は送りません）。<b>／ 目安：1問あたり約3〜5円（AI利用料・長い回答で最大10円ほど）</b></div>
+      <div class="ch-msgs2" id="chmsgs"></div>
+      <div class="chips" id="chchips"></div>
+      <div class="ch-input2">
+        <input id="chq" placeholder="経営数字について質問…（例：資金繰りは大丈夫？ 黒字にするには月いくら必要？）" onkeydown="if(event.key==='Enter'&&!event.isComposing&&event.keyCode!==229)sendChat()">
+        <button id="chsend" onclick="sendChat()">送信</button>
       </div>
     </div>
 
@@ -505,9 +506,9 @@ function render(d){
   // ---- KPI ----
   const kpis=[
     {label:"売上高（当期累計）", val:t.sales, delta:{rate:yoyRate, txt:"前年同期比("+(d.yoy.label||"直近確定2ヶ月")+")"}},
-    {label:"営業利益（実力・試算）", val:estOp, tag:"real", sub:"速報"+man(t.opProfit)+"は棚卸/減価償却 未反映"},
+    {label:"営業利益（実力・試算）", val:estOp, tag:"real", signColor:true, sub:"速報"+man(t.opProfit)+"は棚卸/減価償却 未反映"},
     {label:"現預金残高", val:d.cashTotal, sub:"固定費の約"+runway.toFixed(1)+"ヶ月分（現金支出ベース）"},
-    {label:"借入合計", val:d.bs.shortLoan+d.bs.longLoan, sub:"＋支払手形 "+man(d.bs.shiharaiTegata)+" / 売掛 "+man(d.bs.urikake)},
+    {label:"借入合計", val:d.bs.shortLoan+d.bs.longLoan, loan:true, sub:"＋支払手形 "+man(d.bs.shiharaiTegata)+" / 売掛 "+man(d.bs.urikake)},
   ];
   document.getElementById("kpis").innerHTML = kpis.map(k=>{
     let dl="";
@@ -517,8 +518,10 @@ function render(d){
       dl="<div class='delta "+cls+"'>"+ar+" "+pct(k.delta.rate)+" <span style='color:var(--sub);font-weight:400'>"+k.delta.txt+"</span></div>";
     }
     const tag=k.tag?"<span class='tag "+k.tag+"'>実力試算</span>":"";
+    // マイナス=赤。利益系(signColor)はプラスなら緑。借入(loan)は多いほど注意なので濃い赤系。
+    const vcol = k.val<0 ? "var(--danger)" : k.signColor ? "var(--good)" : k.loan ? "var(--danger)" : "var(--ink)";
     return "<div class='card'><div class='label'>"+k.label+" "+tag+"</div>"+
-           "<div class='val moneybig'>"+yen(k.val)+" <small>("+man(k.val)+")</small></div>"+
+           "<div class='val moneybig' style='color:"+vcol+"'>"+yen(k.val)+" <small>("+man(k.val)+")</small></div>"+
            (k.sub?"<div class='sub'>"+k.sub+"</div>":"")+dl+"</div>";
   }).join("");
 
@@ -589,7 +592,8 @@ function render(d){
   ];
   document.getElementById("realtbl").innerHTML = rt.map(r=>{
     const cls=r[2]||"", strong=cls.includes("b");
-    const col = cls.includes("real")?"var(--brown)":cls.includes("sokuho")?"#2b7fc0":"var(--ink)";
+    // マイナス(控除・赤字)は赤。プラスは行の意味色（実力=茶/速報=青/その他=黒）。
+    const col = r[1]<0 ? "var(--danger)" : cls.includes("real")?"var(--brown)":cls.includes("sokuho")?"#2b7fc0":"var(--ink)";
     const v = (r[1]<0?"−":"")+yen(Math.abs(r[1]));
     return "<tr><td class='"+(cls.includes('sub')?'ind':'')+"' style='"+(strong?'font-weight:700':'')+"'>"+r[0]+"</td>"+
            "<td style='color:"+col+";"+(cls.includes('big')?'font-size:16px;':'')+(strong?'font-weight:800':'')+"'>"+v+"</td></tr>";
