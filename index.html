@@ -124,6 +124,14 @@
   .mkdot{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:6px;vertical-align:-1px}
   .mkbar{display:flex;height:14px;border-radius:0 4px 4px 0;overflow:hidden;min-width:3px;flex:0 0 auto}
   .mkseg{height:100%;min-width:1px}
+  /* ---- 経営コックピット：横スクロール表・チャネル積み上げバー ---- */
+  .barline .seg{height:15px;flex:0 0 auto}
+  .barline .seg:first-child{border-radius:4px 0 0 4px}
+  .barline .seg.segend{border-radius:0 4px 4px 0}
+  .seg.c-ts{background:var(--accent)}
+  .seg.c-ec{background:var(--brown)}
+  .seg.c-ich{background:var(--prev)}
+  .seg.c-ich.est{background:repeating-linear-gradient(45deg,var(--prev) 0 4px,#9bbdd8 4px 8px)}
 
   table.fin{width:100%;border-collapse:collapse;font-size:13px}
   table.fin4 td{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -292,6 +300,55 @@
       </div>
     </div>
 
+    <!-- ============ 経営コックピット拡張 ============ -->
+    <!-- セクション1: チャネル別売上（月次） -->
+    <div class="section-title">📊 チャネル別売上（月次）</div>
+    <div class="grid twob">
+      <div class="card chartcard">
+        <h3>チャネル別 売上構成（直近12ヶ月）</h3>
+        <div class="cap">付売・EC・市売の積み上げ。市売は精算台帳のnet優先／無い月は「全社売上−付売−EC」の残差を推定。</div>
+        <div class="legend" id="chLegend"></div>
+        <div id="chStack"><div class="sub">読み込み中…</div></div>
+      </div>
+      <div class="card">
+        <h3 style="font-size:14px;margin-bottom:12px">月次テーブル（万円）</h3>
+        <div class="costctl" style="margin-bottom:11px">📊 粗利率
+          <input id="keieiGross" type="number" min="1" max="99" step="0.1" onchange="onKeieiGross()">
+          <span>%</span>
+        </div>
+        <div class="tscroll"><table class="fin fin4" id="chTable"></table></div>
+        <div class="sub" id="chGross" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+    <!-- セクション2: 資金繰り予測（6ヶ月） -->
+    <div class="section-title">💴 資金繰り予測（6ヶ月）</div>
+    <div class="card" id="cashfcSummary" style="margin-bottom:13px"><div class="sub">読み込み中…</div></div>
+    <div class="grid twob">
+      <div class="card">
+        <h3 style="font-size:14px;margin-bottom:10px">月末現預金 予測</h3>
+        <div class="tscroll"><table class="fin fin4" id="cashfcTable"></table></div>
+      </div>
+      <div class="card">
+        <h3 style="font-size:14px;margin-bottom:10px">手形決済 予定（支払手形帳より）</h3>
+        <table class="fin" id="tegataTable"></table>
+      </div>
+    </div>
+
+    <!-- セクション3: 顧客 -->
+    <div class="section-title">👥 顧客</div>
+    <div class="grid twob">
+      <div class="card">
+        <h3 style="font-size:14px;margin-bottom:10px">売上トップ10（直近365日）</h3>
+        <div class="tscroll"><table class="fin fin4" id="custTable"></table></div>
+      </div>
+      <div class="card">
+        <h3 style="font-size:14px;margin-bottom:10px">⚠️ 休眠しかけの取引先</h3>
+        <div class="tscroll"><table class="fin fin4" id="dormantTable"></table></div>
+      </div>
+    </div>
+    <div class="note">市売の市場は競り前出荷のため売上額は精算台帳ベース・出荷回数のみの市場もあります。</div>
+
     <!-- AI分析（総評） -->
     <div class="section-title">🤖 AI分析</div>
     <div class="ai" id="ai" style="margin-top:0"></div>
@@ -368,22 +425,53 @@ let SNAPSHOT = null;
 let HISTORY  = [];   // 日次スナップショットの履歴（前日比・週間デルタ用）
 let ZAIKO    = null; // 在庫推定（salesboardのAPIから。ログイン後に取得）
 let ICHIBA   = [];   // 市場別売上（精算書ベース）。ログインAPIのichibaフィールドから取得
+let ZAIKO_MONTHS = null;  // 在庫推定APIの月次（全社売上・仕入）。資金繰り＆市売推定に使用
+let ZAIKO_FAIL = false;   // 在庫推定APIの取得失敗フラグ
+let KEIEI    = null; // 経営コックピット集計（納品書DB・手形・市場台帳）
+let KEIEI_FAIL = false;
 const ZAIKO_API = "https://script.google.com/macros/s/AKfycbxvPjDv81vrJMW2GaqpCJooyxxt7__gvMF4mJkmcGNbNS2xGMoXgTnn6_OEPZ3Rr0spdg/exec?api=zaiko&";
+// タイムアウト付きfetch（在庫推定APIはコールド時12〜40s）
+function fetchWithTimeout(url, ms){
+  return new Promise(function(resolve, reject){
+    let done=false;
+    const to=setTimeout(function(){ if(!done){ done=true; reject(new Error("timeout")); } }, ms);
+    fetch(url).then(function(r){ if(done)return; done=true; clearTimeout(to); resolve(r); })
+              .catch(function(e){ if(done)return; done=true; clearTimeout(to); reject(e); });
+  });
+}
+let zaikoTried=0;
 function fetchZaiko(){
   let cred={}; try{ cred=JSON.parse(sessionStorage.getItem("nippou_cred")||"{}"); }catch(e){}
   if(!cred.e) return;
-  fetch(ZAIKO_API+"email="+encodeURIComponent(cred.e)+"&pass="+encodeURIComponent(cred.p))
-    .then(r=>r.json())
-    .then(j=>{ if(j&&j.ok&&j.today&&isFinite(j.today.inv)){ ZAIKO={inv:j.today.inv, anchor:j.today.anchorTotal}; if(SNAPSHOT) render(SNAPSHOT); } })
-    .catch(()=>{});
+  const url=ZAIKO_API+"email="+encodeURIComponent(cred.e)+"&pass="+encodeURIComponent(cred.p);
+  fetchWithTimeout(url, 25000).then(r=>r.json()).then(j=>{
+    if(!(j&&j.ok)) throw new Error("ng");
+    if(j.today&&isFinite(j.today.inv)){ ZAIKO={inv:j.today.inv, anchor:j.today.anchorTotal}; }
+    if(Array.isArray(j.months)) ZAIKO_MONTHS=j.months;
+    ZAIKO_FAIL=false;
+    if(SNAPSHOT) render(SNAPSHOT);
+    renderKeiei();
+  }).catch(function(){
+    if(zaikoTried<1){ zaikoTried++; setTimeout(fetchZaiko, 1200); }   // リトライ1回
+    else { ZAIKO_FAIL=true; renderKeiei(); }
+  });
 }
+// 経営コックピット集計を取得（納品書DB・手形・市場台帳）
+function fetchKeiei(){
+  let cred={}; try{ cred=JSON.parse(sessionStorage.getItem(CRED_KEY)||"{}"); }catch(e){}
+  if(!cred.e) return;
+  postGAS({action:"keiei", email:cred.e, pass:cred.p}, 2).then(function(d){
+    if(d && d.ok && d.keiei){ KEIEI=d.keiei; KEIEI_FAIL=false; renderKeiei(); }
+    else { KEIEI_FAIL=true; renderKeiei(); }
+  }).catch(function(){ KEIEI_FAIL=true; renderKeiei(); });
+}
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
 if("serviceWorker" in navigator){ try{ navigator.serviceWorker.register("sw.js"); }catch(e){} }
 
 /* ===== ユーティリティ ===== */
 const yen = n => "¥"+Math.round(n).toLocaleString("ja-JP");
 const man = n => { const r=Math.round(n/10000); return (r<0?"−":"")+Math.abs(r).toLocaleString("ja-JP")+"万"; };
 const pct = n => (n>=0?"+":"")+n.toFixed(1)+"%";
-const esc = s => String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const MON=["4月","5月","6月","7月","8月","9月","10月","11月","12月","1月","2月","3月"];
 
 /* ===== ログイン（GAS側でサーバー照合。認証OK時のみ数字を受け取る） ===== */
@@ -440,8 +528,11 @@ function getCostRate(){
   return defaultCostRate();
 }
 function onGrossRate(){ const v=parseFloat(document.getElementById("grossRate").value);
-  if(isFinite(v)&&v>1&&v<99){ localStorage.setItem(GROSS_KEY,v); localStorage.removeItem(COST_KEY_OLD); } render(SNAPSHOT); }
-function resetGrossRate(){ localStorage.removeItem(GROSS_KEY); localStorage.removeItem(COST_KEY_OLD); render(SNAPSHOT); }
+  if(isFinite(v)&&v>1&&v<99){ localStorage.setItem(GROSS_KEY,v); localStorage.removeItem(COST_KEY_OLD); } render(SNAPSHOT); renderKeiei(); }
+function resetGrossRate(){ localStorage.removeItem(GROSS_KEY); localStorage.removeItem(COST_KEY_OLD); render(SNAPSHOT); renderKeiei(); }
+// 経営コックピット側の粗利率入力（同じlocalStorageキーを共有＝上部の実力試算と連動）
+function onKeieiGross(){ const v=parseFloat(document.getElementById("keieiGross").value);
+  if(isFinite(v)&&v>1&&v<99){ localStorage.setItem(GROSS_KEY,v); localStorage.removeItem(COST_KEY_OLD); } if(SNAPSHOT) render(SNAPSHOT); renderKeiei(); }
 
 /* ===== AIチャット（毎回Claude経由。候補チップはその日の状況に連動） ===== */
 const SUGGEST_BASE=["資金繰りは大丈夫？","なぜ速報と実力で利益が違う？","黒字にするには月いくら必要？","売上を伸ばすには？"];
@@ -523,6 +614,7 @@ function showApp(){
   render(SNAPSHOT);
   initChat();
   fetchZaiko();
+  fetchKeiei();
 }
 (async function(){
   if(!sessionStorage.getItem(SESSION_KEY)) return;
@@ -906,6 +998,178 @@ function render(d){
 
   // ---- 市場別売上（他カードの描画を妨げないよう最後に隔離実行） ----
   try{ renderIchiba(ICHIBA); }catch(e){}
+  try{ renderKeiei(); }catch(e){}   // 経営コックピット（SNAPSHOT更新に追従）
+}
+
+/* =========================================================
+   経営コックピット拡張：チャネル別売上 / 資金繰り予測 / 顧客
+   各セクション独立try/catch。データ欠損でも他は死なない。
+   ========================================================= */
+function renderKeiei(){
+  try{ renderKeieiChannels(); }catch(e){}
+  try{ renderKeieiCashflow(); }catch(e){}
+  try{ renderKeieiCustomers(); }catch(e){}
+}
+
+// ---- セクション1：チャネル別売上（月次・積み上げ） ----
+function renderKeieiChannels(){
+  const stackEl=document.getElementById("chStack"), tblEl=document.getElementById("chTable");
+  const legEl=document.getElementById("chLegend"), grEl=document.getElementById("chGross");
+  if(!stackEl) return;
+  if(!KEIEI || !KEIEI.channels){
+    if(KEIEI_FAIL){ stackEl.innerHTML="<div class='sub'>取得できませんでした。時間をおいて再読み込みしてください。</div>"; }
+    return;
+  }
+  const mon=(KEIEI.channels.monthly||[]).slice(-12);
+  const ichMap={}; ((KEIEI.ichiba&&KEIEI.ichiba.monthly)||[]).forEach(m=>{ ichMap[m.ym]=m.net; });
+  const zMap={}; (ZAIKO_MONTHS||[]).forEach(m=>{ if(isFinite(m.sales)) zMap[m.ym]=m.sales; });
+  const rows=mon.map(m=>{
+    const ts=m.tsukiuri||0, ec=m.ec||0;
+    let ich=0, ichEst=false;
+    if(isFinite(ichMap[m.ym]) && ichMap[m.ym]>0){ ich=ichMap[m.ym]; }
+    else if(isFinite(zMap[m.ym])){ const resid=zMap[m.ym]-ts-ec; ich=resid>0?resid:0; ichEst=(ich>0); }
+    return {ym:m.ym, ts:ts, ec:ec, ich:ich, ichEst:ichEst, total:ts+ec+ich};
+  });
+  const maxT=Math.max(1,...rows.map(r=>r.total));
+  stackEl.innerHTML=rows.map(r=>{
+    const mlabel=(+r.ym.split("-")[1])+"月";
+    const segs=[];
+    if(r.ts>0)  segs.push({w:r.ts,  cls:"c-ts"});
+    if(r.ec>0)  segs.push({w:r.ec,  cls:"c-ec"});
+    if(r.ich>0) segs.push({w:r.ich, cls:"c-ich"+(r.ichEst?" est":"")});
+    let bar="";
+    segs.forEach((s,idx)=>{ bar+="<div class='seg "+s.cls+(idx===segs.length-1?" segend":"")+"' style='width:"+(s.w/maxT*72)+"%'></div>"; });
+    return "<div class='barrow'><div class='m'>"+mlabel+"</div>"+
+      "<div class='barline'>"+bar+"<span class='bv'>"+man(r.total)+(r.ichEst?" <span style='color:var(--sub);font-weight:400'>(市売推定)</span>":"")+"</span></div></div>";
+  }).join("") || "<div class='sub'>データがありません。</div>";
+  if(legEl) legEl.innerHTML=
+    "<span><i style='background:var(--accent)'></i>付売</span>"+
+    "<span><i style='background:var(--brown)'></i>EC</span>"+
+    "<span><i style='background:var(--prev)'></i>市売</span>"+
+    "<span><i style='background:repeating-linear-gradient(45deg,var(--prev) 0 3px,#9bbdd8 3px 6px)'></i>市売(推定)</span>";
+  // 月次テーブル＋粗利試算
+  const gr=1-getCostRate();
+  const kg=document.getElementById("keieiGross"); if(kg && document.activeElement!==kg) kg.value=(gr*100).toFixed(1);
+  let h="<tr class='fh'><td>月</td><td>付売</td><td>EC</td><td>市売</td><td>合計</td><td>粗利概算</td></tr>";
+  rows.forEach(r=>{
+    h+="<tr><td>"+(+r.ym.split("-")[1])+"月</td><td>"+man(r.ts)+"</td><td>"+man(r.ec)+"</td>"+
+       "<td>"+man(r.ich)+(r.ichEst?"<span style='color:var(--sub)'>*</span>":"")+"</td>"+
+       "<td style='font-weight:700'>"+man(r.total)+"</td>"+
+       "<td style='color:var(--brown)'>"+man(r.total*gr)+"</td></tr>";
+  });
+  if(tblEl) tblEl.innerHTML=h;
+  if(grEl) grEl.innerHTML="粗利＝売上×（1−原価率 "+((1-gr)*100).toFixed(1)+"%）。<b>*</b>は市売を「全社売上−付売−EC」で推定した月。運賃・チャネル別原価差は未考慮の概算です。";
+}
+
+// ---- セクション2：資金繰り予測（6ヶ月） ----
+function renderKeieiCashflow(){
+  const sumEl=document.getElementById("cashfcSummary");
+  const tblEl=document.getElementById("cashfcTable");
+  const tgEl=document.getElementById("tegataTable");
+  if(!SNAPSHOT){ return; }
+
+  // 手形決済予定テーブル（実データ）
+  const teg=(KEIEI&&KEIEI.tegata)||null;
+  const tegMap={}; if(teg&&teg.byMonth) teg.byMonth.forEach(m=>{ tegMap[m.ym]=m.amount; });
+  if(tgEl){
+    if(teg && teg.byMonth && teg.byMonth.length){
+      let h="<tr><td class='ind' style='color:var(--sub);font-size:10.5px;font-weight:700'>支払月</td><td style='text-align:right;color:var(--sub);font-size:10.5px;font-weight:700'>手形決済</td></tr>";
+      teg.byMonth.forEach(m=>{ h+="<tr><td class='ind'>"+m.ym.replace("-","/")+"</td><td style='text-align:right;color:var(--warn);font-weight:600'>"+yen(m.amount)+"</td></tr>"; });
+      h+="<tr><td><b>合計</b></td><td style='text-align:right'><b>"+yen(teg.total)+"</b></td></tr>";
+      tgEl.innerHTML=h;
+    } else if(KEIEI){ tgEl.innerHTML="<tr><td class='ind'>今後の手形決済予定はありません。</td></tr>"; }
+    else if(KEIEI_FAIL){ tgEl.innerHTML="<tr><td class='ind'>取得できませんでした。</td></tr>"; }
+    else { tgEl.innerHTML="<tr><td class='ind'>読み込み中…</td></tr>"; }
+  }
+
+  // 予想入金＝直近3確定月の全社売上平均（在庫推定API）。無ければマネフォ月次で代替。
+  let inflow=null, inflowSrc="";
+  const conf=(ZAIKO_MONTHS||[]).filter(m=>!m.partial && isFinite(m.sales)).slice(-3);
+  if(conf.length){ inflow=conf.reduce((s,m)=>s+m.sales,0)/conf.length; inflowSrc="全社売上（在庫推定API）直近3ヶ月平均"; }
+  else {
+    const ms=(SNAPSHOT.monthlySalesCur||[]).filter(v=>v>0).slice(-3);
+    if(ms.length){ inflow=ms.reduce((s,v)=>s+v,0)/ms.length; inflowSrc="マネフォ月次売上 直近3ヶ月平均（在庫推定API未取得のため代替）"; }
+  }
+  const cashFixed=(SNAPSHOT.est&&SNAPSHOT.est.cashFixedMonthly>0)?SNAPSHOT.est.cashFixedMonthly:5067231;
+
+  let cash=SNAPSHOT.cashTotal||0;
+  const base=new Date();
+  const rows=[];
+  for(let k=0;k<6;k++){
+    const dt=new Date(base.getFullYear(), base.getMonth()+k, 1);
+    const ym=dt.getFullYear()+"-"+("0"+(dt.getMonth()+1)).slice(-2);
+    const inf=(inflow!=null)?inflow:0;
+    const tg=tegMap[ym]||0;
+    const end=cash+inf-tg-cashFixed;
+    rows.push({ym:ym, inf:inf, tg:tg, fix:cashFixed, end:end});
+    cash=end;
+  }
+  let minEnd=Infinity, dangerMon="", warnMon="";
+  rows.forEach(r=>{ if(r.end<minEnd)minEnd=r.end;
+    if(r.end<0 && !dangerMon) dangerMon=(+r.ym.split("-")[1])+"月";
+    else if(r.end<cashFixed && !warnMon) warnMon=(+r.ym.split("-")[1])+"月"; });
+
+  if(tblEl){
+    let h="<tr class='fh'><td>月</td><td>入金予想</td><td>手形</td><td>固定費</td><td>月末残</td></tr>";
+    rows.forEach(r=>{
+      const wcol=r.end<0?"var(--danger)":(r.end<cashFixed?"var(--warn)":"var(--ink)");
+      h+="<tr><td>"+r.ym.replace("-","/")+"</td>"+
+        "<td>"+(inflow!=null?man(r.inf):"—")+"</td>"+
+        "<td style='color:var(--warn)'>"+(r.tg?"−"+man(r.tg):"0")+"</td>"+
+        "<td style='color:var(--sub)'>−"+man(r.fix)+"</td>"+
+        "<td style='color:"+wcol+";font-weight:800'>"+man(r.end)+"</td></tr>";
+    });
+    tblEl.innerHTML=h;
+  }
+  if(sumEl){
+    let msg, badge;
+    if(inflow==null){ badge="warn"; msg="⚠️ 入金予測に必要な全社売上データを取得できませんでした（手形決済予定のみ表示）。"; }
+    else if(dangerMon){ badge="danger"; msg="🚨 "+dangerMon+"に資金ショートの恐れ（月末残がマイナス）。入金前倒し・手形/固定費の調整を検討してください。"; }
+    else if(warnMon){ badge="warn"; msg="⚠️ "+warnMon+"に月末残が固定費1ヶ月分（"+man(cashFixed)+"）を下回る見込み。資金に注意。"; }
+    else{ badge="good"; msg="✅ 6ヶ月内に資金ショートの兆候はありません。"; }
+    sumEl.innerHTML="<div style='display:flex;align-items:center;gap:10px;flex-wrap:wrap'>"+
+      "<span class='badge "+badge+"'>資金繰り</span><b style='font-size:14px'>"+msg+"</b></div>"+
+      "<div class='sub' style='margin-top:8px'>開始＝最新スナップショットの現預金 "+man(SNAPSHOT.cashTotal||0)+"。予想入金＝"+(inflowSrc||"—")+"（入金サイト未考慮の概算）。手形は支払手形帳の実データ、固定費は現金固定費 月"+man(cashFixed)+"。</div>";
+  }
+}
+
+// ---- セクション3：顧客（トップ10・休眠リスト） ----
+function renderKeieiCustomers(){
+  const ct=document.getElementById("custTable"), dt=document.getElementById("dormantTable");
+  if(!KEIEI){
+    if(KEIEI_FAIL){ if(ct)ct.innerHTML="<tr><td class='ind'>取得できませんでした。</td></tr>"; if(dt)dt.innerHTML="<tr><td class='ind'>取得できませんでした。</td></tr>"; }
+    return;
+  }
+  const cust=(KEIEI.customers||[]).slice(0,10);
+  if(ct){
+    let h="<tr class='fh'><td>取引先</td><td>区分</td><td>365日売上</td><td>前年比</td><td>最終出荷</td></tr>";
+    cust.forEach(c=>{
+      let yoy="—", col="var(--sub)";
+      if(c.salesPrev365>0){ const r=(c.sales365/c.salesPrev365-1)*100; yoy=(r>=0?"+":"")+r.toFixed(0)+"%"; col=r>=0?"var(--good)":"var(--danger)"; }
+      else if(c.sales365>0){ yoy="新規/増"; col="var(--good)"; }
+      h+="<tr><td style='white-space:normal'>"+esc(c.name)+"</td>"+
+         "<td style='color:var(--sub)'>"+esc(c.channel)+"</td>"+
+         "<td>"+man(c.sales365)+"</td>"+
+         "<td style='color:"+col+";font-weight:700'>"+yoy+"</td>"+
+         "<td style='color:var(--sub)'>"+(c.last?c.last.slice(5).replace("-","/"):"—")+"</td></tr>";
+    });
+    ct.innerHTML=h + (cust.length?"":"<tr><td class='ind'>データがありません。</td></tr>");
+  }
+  const dorm=(KEIEI.dormant||[]).slice(0,15);
+  if(dt){
+    if(dorm.length){
+      let h="<tr class='fh'><td>取引先</td><td>区分</td><td>最終出荷から</td><td>以前の年商</td></tr>";
+      const today=new Date();
+      dorm.forEach(c=>{
+        let days="—"; if(c.last){ days=Math.round((today-new Date(c.last))/86400000)+"日"; }
+        h+="<tr><td style='white-space:normal'>"+esc(c.name)+"</td>"+
+           "<td style='color:var(--sub)'>"+esc(c.channel)+"</td>"+
+           "<td style='color:var(--warn);font-weight:600'>"+days+"</td>"+
+           "<td>"+(c.salesPrev365>0?man(c.salesPrev365):"—")+"</td></tr>";
+      });
+      dt.innerHTML=h;
+    } else { dt.innerHTML="<tr><td class='ind'>休眠しかけの取引先はありません（または集計中）。</td></tr>"; }
+  }
 }
 </script>
 </body>
