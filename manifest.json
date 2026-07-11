@@ -1,0 +1,11 @@
+{
+  "name": "林材木店 経営日報",
+  "short_name": "経営日報",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f5f7f5",
+  "theme_color": "#1f9d57",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
