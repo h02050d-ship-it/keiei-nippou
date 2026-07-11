@@ -119,6 +119,12 @@
   .feerow .fa{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
   .feerow .fa .yoy{display:block;font-size:9.5px;font-weight:700;line-height:1.3}
 
+  /* ---- 市場別売上（精算書ベース） ---- */
+  .tscroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .mkdot{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  .mkbar{display:flex;height:14px;border-radius:0 4px 4px 0;overflow:hidden;min-width:3px;flex:0 0 auto}
+  .mkseg{height:100%;min-width:1px}
+
   table.fin{width:100%;border-collapse:collapse;font-size:13px}
   table.fin4 td{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
   table.fin4 td:first-child{text-align:left;white-space:normal}
@@ -309,6 +315,22 @@
       <div class="card" id="bsview"></div>
     </div>
 
+    <!-- 市場別売上（精算書ベース） -->
+    <div class="section-title hidden" id="ichibaTitle">🏬 市場別売上（精算書ベース）</div>
+    <div class="grid twob hidden" id="ichibaCard">
+      <div class="card">
+        <h3 style="font-size:14px;margin-bottom:8px">市場別 今期累計（精算書ベース）</h3>
+        <div class="tscroll"><table class="fin fin4" id="ichibaTbl"></table></div>
+      </div>
+      <div class="card chartcard">
+        <h3>月別 × 市場（売上・積み上げ）</h3>
+        <div class="cap" id="ichibaCap">月ごとの売上合計を市場別に色分け</div>
+        <div class="legend" id="ichibaLegend" style="flex-wrap:wrap"></div>
+        <div id="ichibaBars"></div>
+        <div class="sub" style="margin-top:11px;line-height:1.6">精算書ベース＝市場手数料差引後の手取り（税抜）。仕入原価・運賃は未控除。Driveに自動保存された各市場の精算書から自動取込。</div>
+      </div>
+    </div>
+
     <div class="note" id="caveat"></div>
 
     <!-- 追加予定（やることリスト・データの前提が整い次第実装） -->
@@ -345,6 +367,7 @@ const GAS_URL = "https://script.google.com/macros/s/AKfycbw4wRp48Y0B89JWbNB8nBOm
 let SNAPSHOT = null;
 let HISTORY  = [];   // 日次スナップショットの履歴（前日比・週間デルタ用）
 let ZAIKO    = null; // 在庫推定（salesboardのAPIから。ログイン後に取得）
+let ICHIBA   = [];   // 市場別売上（精算書ベース）。ログインAPIのichibaフィールドから取得
 const ZAIKO_API = "https://script.google.com/macros/s/AKfycbxvPjDv81vrJMW2GaqpCJooyxxt7__gvMF4mJkmcGNbNS2xGMoXgTnn6_OEPZ3Rr0spdg/exec?api=zaiko&";
 function fetchZaiko(){
   let cred={}; try{ cred=JSON.parse(sessionStorage.getItem("nippou_cred")||"{}"); }catch(e){}
@@ -360,10 +383,11 @@ if("serviceWorker" in navigator){ try{ navigator.serviceWorker.register("sw.js")
 const yen = n => "¥"+Math.round(n).toLocaleString("ja-JP");
 const man = n => { const r=Math.round(n/10000); return (r<0?"−":"")+Math.abs(r).toLocaleString("ja-JP")+"万"; };
 const pct = n => (n>=0?"+":"")+n.toFixed(1)+"%";
+const esc = s => String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const MON=["4月","5月","6月","7月","8月","9月","10月","11月","12月","1月","2月","3月"];
 
 /* ===== ログイン（GAS側でサーバー照合。認証OK時のみ数字を受け取る） ===== */
-const SESSION_KEY="nippou_session", DATA_KEY="nippou_data", CRED_KEY="nippou_cred";
+const SESSION_KEY="nippou_session", DATA_KEY="nippou_data", CRED_KEY="nippou_cred", ICHIBA_KEY="nippou_ichiba";
 async function postGAS(payload,tries){
   tries=tries||3;
   let lastErr;
@@ -387,9 +411,11 @@ async function doLogin(){
     if(data.ok && data.latest){
       SNAPSHOT=data.latest;
       HISTORY=data.history||[];
+      ICHIBA=Array.isArray(data.ichiba)?data.ichiba:[];
       sessionStorage.setItem(SESSION_KEY,e);
       sessionStorage.setItem(DATA_KEY,JSON.stringify(data.latest));
       try{ sessionStorage.setItem("nippou_hist",JSON.stringify(HISTORY)); }catch(e2){}
+      try{ sessionStorage.setItem(ICHIBA_KEY,JSON.stringify(ICHIBA)); }catch(e2){}
       sessionStorage.setItem(CRED_KEY,JSON.stringify({e:e,p:p}));
       lerr.textContent=""; showApp();
     }else if(data.ok){
@@ -401,7 +427,7 @@ async function doLogin(){
     lerr.textContent="接続エラー。通信環境を確認して再度お試しください。";
   }
 }
-function doLogout(){ sessionStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(DATA_KEY); sessionStorage.removeItem(CRED_KEY); location.reload(); }
+function doLogout(){ sessionStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(DATA_KEY); sessionStorage.removeItem(CRED_KEY); sessionStorage.removeItem(ICHIBA_KEY); location.reload(); }
 
 /* ===== 粗利率（直近実績ベース・ユーザー調整可・localStorage保存。内部計算は原価率=1−粗利率） ===== */
 const GROSS_KEY="nippou_grossrate", COST_KEY_OLD="nippou_costrate", COST_DEFAULT=43.2;
@@ -503,6 +529,7 @@ function showApp(){
   const d=sessionStorage.getItem(DATA_KEY);
   if(d){ try{ SNAPSHOT=JSON.parse(d); }catch(e){} }
   try{ HISTORY=JSON.parse(sessionStorage.getItem("nippou_hist")||"[]"); }catch(e){ HISTORY=[]; }
+  try{ ICHIBA=JSON.parse(sessionStorage.getItem(ICHIBA_KEY)||"[]"); }catch(e){ ICHIBA=[]; }
   if(SNAPSHOT) showApp();              // キャッシュで即表示
   const c=sessionStorage.getItem(CRED_KEY);  // 背景で最新を取り直す
   if(!c) return;
@@ -512,13 +539,99 @@ function showApp(){
     if(data && data.ok && data.latest){
       SNAPSHOT=data.latest;
       HISTORY=data.history||[];
+      ICHIBA=Array.isArray(data.ichiba)?data.ichiba:[];
       sessionStorage.setItem(DATA_KEY,JSON.stringify(data.latest));
       try{ sessionStorage.setItem("nippou_hist",JSON.stringify(HISTORY)); }catch(e2){}
+      try{ sessionStorage.setItem(ICHIBA_KEY,JSON.stringify(ICHIBA)); }catch(e2){}
       if(document.getElementById("app").classList.contains("hidden")) showApp();
       else render(SNAPSHOT);
     }
   }catch(e){}
 })();
+
+/* ===== 市場別売上（精算書ベース） =====
+   精算書1枚=1行。sales=売上高(税抜), fees=市場手数料等の経費, net=手取り(税抜)。
+   aggregateIchiba/fiscalMonths は純粋関数（DOM非依存・Node単体検証済み）。 */
+function aggregateIchiba(rows, fyStart, fyEnd){
+  const out={markets:[],total:{sales:0,fees:0,net:0,count:0},byMonth:{}};
+  if(!Array.isArray(rows)) return out;
+  const inFY=rows.filter(r=>r && typeof r.date==="string" && r.date>=fyStart && r.date<=fyEnd);
+  const bm={};
+  inFY.forEach(r=>{
+    const m=(r.market==null||r.market==="")?"(不明)":String(r.market);
+    const sales=(+r.sales)||0, fees=(+r.fees)||0;
+    const net=isFinite(+r.net)? (+r.net) : (sales-fees);
+    if(!bm[m]) bm[m]={market:m,sales:0,fees:0,net:0,count:0};
+    bm[m].sales+=sales; bm[m].fees+=fees; bm[m].net+=net; bm[m].count++;
+    const ym=r.date.slice(0,7);
+    if(!out.byMonth[ym]) out.byMonth[ym]={};
+    out.byMonth[ym][m]=(out.byMonth[ym][m]||0)+sales;
+    out.total.sales+=sales; out.total.fees+=fees; out.total.net+=net; out.total.count++;
+  });
+  out.markets=Object.keys(bm).map(k=>bm[k]).sort((a,b)=>b.sales-a.sales || a.market.localeCompare(b.market));
+  return out;
+}
+function fiscalMonths(fyStartYear){
+  const arr=[];
+  for(let i=0;i<12;i++){ const mAbs=4+i, yr=mAbs<=12?fyStartYear:fyStartYear+1, mm=mAbs<=12?mAbs:mAbs-12;
+    arr.push({key:yr+"-"+String(mm).padStart(2,"0"),label:MON[i]}); }
+  return arr;
+}
+// CVD配慮パレット（既存の販管費グループ色を流用：青/橙/緑/紫/茶＋補助）
+const ICHIBA_PALETTE=["#3d7fb5","#c08722","#1f9d57","#a5578a","#9a6b3f","#5aa0c4","#c4831c","#7a8a80"];
+function renderIchiba(rows){
+  const titleEl=document.getElementById("ichibaTitle");
+  const cardEl=document.getElementById("ichibaCard");
+  if(!titleEl||!cardEl) return;
+  const hide=()=>{ titleEl.classList.add("hidden"); cardEl.classList.add("hidden"); };
+  try{
+    if(!Array.isArray(rows) || rows.length===0){ hide(); return; }
+    // 会計年度（4月始まり）：SNAPSHOTがあればそれに合わせ、無ければ今日基準
+    let fy;
+    if(SNAPSHOT && isFinite(+SNAPSHOT.fiscalYear)) fy=+SNAPSHOT.fiscalYear;
+    else{ const now=new Date(); fy=(now.getMonth()+1>=4)?now.getFullYear():now.getFullYear()-1; }
+    const fyStart=fy+"-04-01", fyEnd=(fy+1)+"-03-31";
+    const agg=aggregateIchiba(rows, fyStart, fyEnd);
+    if(!agg.markets.length){ hide(); return; }
+    titleEl.classList.remove("hidden"); cardEl.classList.remove("hidden");
+    const colorOf={}; agg.markets.forEach((m,i)=>{ colorOf[m.market]=ICHIBA_PALETTE[i%ICHIBA_PALETTE.length]; });
+
+    // ---- 市場別テーブル（売上降順・最下行に合計） ----
+    let h="<tr class='fh'><td>市場</td><td>売上</td><td>手数料等</td><td>手取り</td><td>件数</td></tr>";
+    agg.markets.forEach(m=>{
+      h+="<tr><td><span class='mkdot' style='background:"+colorOf[m.market]+"'></span>"+esc(m.market)+"</td>"+
+         "<td>"+man(m.sales)+"</td><td style='color:var(--warn)'>"+man(m.fees)+"</td>"+
+         "<td style='font-weight:700'>"+man(m.net)+"</td><td>"+m.count+"</td></tr>";
+    });
+    h+="<tr style='font-weight:800'><td>合計</td><td>"+man(agg.total.sales)+"</td>"+
+       "<td style='color:var(--warn)'>"+man(agg.total.fees)+"</td><td>"+man(agg.total.net)+"</td>"+
+       "<td>"+agg.total.count+"</td></tr>";
+    document.getElementById("ichibaTbl").innerHTML=h;
+
+    // ---- 凡例（市場＝色） ----
+    const lg=document.getElementById("ichibaLegend");
+    if(lg) lg.innerHTML=agg.markets.map(m=>"<span><i style='background:"+colorOf[m.market]+"'></i>"+esc(m.market)+"</span>").join("");
+
+    // ---- 月別×市場 積み上げ横バー（売上） ----
+    const months=fiscalMonths(fy).filter(mo=>agg.byMonth[mo.key]);
+    const totals=months.map(mo=>agg.markets.reduce((t,m)=>t+(agg.byMonth[mo.key][m.market]||0),0));
+    const maxMo=Math.max(1,...totals);
+    const barsEl=document.getElementById("ichibaBars");
+    if(barsEl){
+      barsEl.innerHTML=months.map((mo,idx)=>{
+        const seg=agg.byMonth[mo.key], tot=totals[idx];
+        const barW=Math.max(tot/maxMo*88,2);   // 月合計の横幅（右にラベル余白）
+        const segs=agg.markets.filter(m=>(seg[m.market]||0)>0).map(m=>{
+          const w=tot>0? (seg[m.market]/tot*100):0;
+          return "<div class='mkseg' style='width:"+w+"%;background:"+colorOf[m.market]+"' title='"+esc(m.market)+" "+man(seg[m.market])+"'></div>";
+        }).join("");
+        return "<div class='barrow'><div class='m'>"+mo.label+"</div><div class='barpair'>"+
+          "<div class='barline'><div class='mkbar' style='width:"+barW+"%'>"+segs+"</div>"+
+          "<span class='bv'>"+man(tot)+"</span></div></div></div>";
+      }).join("") || "<div class='sub'>今期の月次データはまだありません。</div>";
+    }
+  }catch(e){ hide(); }
+}
 
 /* ===== 描画 ===== */
 function render(d){
@@ -786,6 +899,9 @@ function render(d){
     "・<b>速報</b>＝マネフォの期中の試算表そのまま。<b>期中は棚卸と減価償却が試算表に反映されない</b>ため、粗利・営業利益は実力より良く出ます。<br>"+
     "・<b>実力試算・着地・損益分岐点</b>＝直近実績の粗利率 "+(grossRate*100).toFixed(1)+"%（初期値は前期実績）・固定費・減価償却を前提にした目安で、確定値ではありません。粗利率の入力欄を変えると全体が再計算されます。正確な年間減価償却（モルダー込み）が固まると精度が上がります。<br>"+
     "・数字は<b>記帳が進んだところまで</b>が反映されます（自動連携を使っていない場合、日報の鮮度は記帳のタイミング次第です）。";
+
+  // ---- 市場別売上（他カードの描画を妨げないよう最後に隔離実行） ----
+  try{ renderIchiba(ICHIBA); }catch(e){}
 }
 </script>
 </body>
