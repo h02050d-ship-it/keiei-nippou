@@ -268,10 +268,10 @@
     <div class="grid twob">
       <div class="card">
         <h3 style="font-size:14px;margin-bottom:8px">会計速報 vs 調整後の実力値（試算）</h3>
-        <div class="costctl">📊 直近の原価率
-          <input id="costRate" type="number" min="0" max="99" step="0.1" onchange="onCostRate()">
+        <div class="costctl">📊 直近の粗利率
+          <input id="grossRate" type="number" min="1" max="99" step="0.1" onchange="onGrossRate()">
           <span>%</span>
-          <button class="mini" id="costResetBtn" onclick="resetCostRate()">前期実績に戻す</button>
+          <button class="mini" id="grossResetBtn" onclick="resetGrossRate()">前期実績に戻す</button>
         </div>
         <table class="fin" id="realtbl"></table>
       </div>
@@ -393,13 +393,19 @@ async function doLogin(){
 }
 function doLogout(){ sessionStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(DATA_KEY); sessionStorage.removeItem(CRED_KEY); location.reload(); }
 
-/* ===== 原価率（直近実績ベース・ユーザー調整可・localStorage保存） ===== */
-const COST_KEY="nippou_costrate", COST_DEFAULT=43.2;
+/* ===== 粗利率（直近実績ベース・ユーザー調整可・localStorage保存。内部計算は原価率=1−粗利率） ===== */
+const GROSS_KEY="nippou_grossrate", COST_KEY_OLD="nippou_costrate", COST_DEFAULT=43.2;
 function defaultCostRate(){ const c=SNAPSHOT&&SNAPSHOT.est&&SNAPSHOT.est.cogsRate; return (isFinite(c)&&c>0&&c<1)? c : COST_DEFAULT/100; }
-function getCostRate(){ const v=parseFloat(localStorage.getItem(COST_KEY)); return (isFinite(v)&&v>0&&v<99)? v/100 : defaultCostRate(); }
-function onCostRate(){ const v=parseFloat(document.getElementById("costRate").value);
-  if(isFinite(v)&&v>0&&v<99){ localStorage.setItem(COST_KEY,v); } render(SNAPSHOT); }
-function resetCostRate(){ localStorage.removeItem(COST_KEY); render(SNAPSHOT); }
+function getCostRate(){
+  const g=parseFloat(localStorage.getItem(GROSS_KEY));
+  if(isFinite(g)&&g>1&&g<99) return 1-g/100;
+  const v=parseFloat(localStorage.getItem(COST_KEY_OLD));   // 旧「原価率」入力からの移行（値は原価率として解釈）
+  if(isFinite(v)&&v>0&&v<99) return v/100;
+  return defaultCostRate();
+}
+function onGrossRate(){ const v=parseFloat(document.getElementById("grossRate").value);
+  if(isFinite(v)&&v>1&&v<99){ localStorage.setItem(GROSS_KEY,v); localStorage.removeItem(COST_KEY_OLD); } render(SNAPSHOT); }
+function resetGrossRate(){ localStorage.removeItem(GROSS_KEY); localStorage.removeItem(COST_KEY_OLD); render(SNAPSHOT); }
 
 /* ===== AIチャット（毎回Claude経由。候補チップはその日の状況に連動） ===== */
 const SUGGEST_BASE=["資金繰りは大丈夫？","なぜ速報と実力で利益が違う？","黒字にするには月いくら必要？","売上を伸ばすには？"];
@@ -522,14 +528,14 @@ function render(d){
     const lc=document.getElementById("legendCur"), lp=document.getElementById("legendPrev");
     if(lc) lc.textContent="今期 "+d.fiscalYear+"年度";
     if(lp) lp.textContent="前期 "+(d.fiscalYear-1)+"年度";
-    const rb=document.getElementById("costResetBtn");
-    if(rb) rb.textContent="前期実績 "+(defaultCostRate()*100).toFixed(1)+"% に戻す";
+    const rb=document.getElementById("grossResetBtn");
+    if(rb) rb.textContent="前期実績 "+((1-defaultCostRate())*100).toFixed(1)+"% に戻す";
   })();
 
   // ---- 原価率（直近実績ベース・調整可） ----
   const costRate  = getCostRate();
   const grossRate = 1 - costRate;
-  const ci=document.getElementById("costRate"); if(ci && document.activeElement!==ci) ci.value=(costRate*100).toFixed(1);
+  const gi=document.getElementById("grossRate"); if(gi && document.activeElement!==gi) gi.value=(grossRate*100).toFixed(1);
 
   // ---- 派生計算 ----
   const estMonths = (function(){                                // 期首月〜asOf月の経過月数（減価償却の計上月数）
@@ -685,7 +691,7 @@ function render(d){
     ["売上高", t.sales, ""],
     ["▲ 売上原価（速報＝仕入のみ）", -t.cogs, "sub"],
     ["＝ 粗利（速報）", t.grossProfit, "b sokuho"],
-    ["［試算］売上原価 "+(costRate*100).toFixed(1)+"%で再計算", -(t.sales*costRate), "sub"],
+    ["［試算］売上原価（粗利率 "+(grossRate*100).toFixed(1)+"%で再計算）", -(t.sales*costRate), "sub"],
     ["＝ 粗利（実力試算）", estGross, "b real"],
     ["▲ 販管費", -t.sgaTotal, "sub"],
     ["▲ 減価償却 見込（月"+man(e.deprPerMonth)+"×"+estMonths+"ヶ月）", -estDepr, "sub"],
@@ -732,7 +738,7 @@ function render(d){
     "<b>⚠️ この数字の読み方</b><br>"+
     "・<b>在庫（商品 "+man(d.bs.inventory)+"）は期中の実際の増減が反映されていません。</b>会計上は前期末の棚卸残高のまま動かないため、実在庫とはズレている前提で見てください（決算の実地棚卸で確定します）。<br>"+
     "・<b>速報</b>＝マネフォの期中の試算表そのまま。<b>期中は棚卸と減価償却が試算表に反映されない</b>ため、粗利・営業利益は実力より良く出ます。<br>"+
-    "・<b>実力試算・着地・損益分岐点</b>＝直近実績の原価率 "+(costRate*100).toFixed(1)+"%（初期値は前期実績）・固定費・減価償却を前提にした目安で、確定値ではありません。原価率の入力欄を変えると全体が再計算されます。正確な年間減価償却（モルダー込み）が固まると精度が上がります。<br>"+
+    "・<b>実力試算・着地・損益分岐点</b>＝直近実績の粗利率 "+(grossRate*100).toFixed(1)+"%（初期値は前期実績）・固定費・減価償却を前提にした目安で、確定値ではありません。粗利率の入力欄を変えると全体が再計算されます。正確な年間減価償却（モルダー込み）が固まると精度が上がります。<br>"+
     "・数字は<b>記帳が進んだところまで</b>が反映されます（自動連携を使っていない場合、日報の鮮度は記帳のタイミング次第です）。";
 }
 </script>
