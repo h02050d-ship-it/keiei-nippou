@@ -272,7 +272,8 @@
       </div>
       <div class="card chartcard">
         <h3>販管費 内訳トップ（当期累計）</h3>
-        <div class="cap">金額の大きい順</div>
+        <div class="cap">金額の大きい順・費目グループ別に色分け</div>
+        <div class="legend" id="feesLegend" style="flex-wrap:wrap"></div>
         <div id="fees"></div>
       </div>
     </div>
@@ -599,12 +600,23 @@ function render(d){
            "<td style='color:"+col+";"+(cls.includes('big')?'font-size:16px;':'')+(strong?'font-weight:800':'')+"'>"+v+"</td></tr>";
   }).join("");
 
-  // ---- 販管費バー（茶＝コスト系。薄いトラックで比率が読みやすい） ----
+  // ---- 販管費バー（費目グループ別に色分け。配色は色覚検証済み） ----
+  const SGA_GROUPS=[
+    {name:"人件費",     color:"#3d7fb5", re:/役員報酬|給料|給与|賞与|法定福利|福利厚生|退職|雑給/},
+    {name:"物流・販売", color:"#c08722", re:/荷造|運賃|運搬|発送|販売手数料|広告|販促|支払手数料|決済|旅費|交通/},
+    {name:"設備・維持", color:"#1f9d57", re:/地代|家賃|水道光熱|修繕|リース|賃借|保険|減価償却|車両|燃料/},
+    {name:"その他",     color:"#a5578a", re:/./}
+  ];
+  const sgaGroup=name=>SGA_GROUPS.find(g=>g.re.test(name));
   const maxF=Math.max(...d.sga.map(f=>f[1]));
-  document.getElementById("fees").innerHTML = d.sga.map(f=>
-    "<div class='feerow'><div class='fn'>"+f[0]+"</div>"+
-    "<div class='feetrack'><div class='feebar' style='width:"+(f[1]/maxF*100)+"%'></div></div>"+
-    "<div class='fa'>"+man(f[1])+"</div></div>").join("");
+  document.getElementById("fees").innerHTML = d.sga.map(f=>{
+    const g=sgaGroup(f[0]);
+    return "<div class='feerow'><div class='fn'>"+f[0]+"</div>"+
+    "<div class='feetrack'><div class='feebar' style='width:"+(f[1]/maxF*100)+"%;background:"+g.color+"'></div></div>"+
+    "<div class='fa'>"+man(f[1])+"</div></div>";}).join("");
+  const gUsed=SGA_GROUPS.filter(g=>d.sga.some(f=>sgaGroup(f[0])===g));
+  const fl=document.getElementById("feesLegend");
+  if(fl) fl.innerHTML=gUsed.map(g=>"<span><i style='background:"+g.color+"'></i>"+g.name+"</span>").join("");
 
   // ---- 注意書き ----
   document.getElementById("caveat").innerHTML =
