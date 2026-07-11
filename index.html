@@ -299,6 +299,24 @@
     </div>
 
     <div class="note" id="caveat"></div>
+
+    <!-- 追加予定（やることリスト・データの前提が整い次第実装） -->
+    <div class="section-title">🔜 追加予定（やることリスト）</div>
+    <div class="card" style="font-size:12.5px;line-height:1.9">
+      <div style="margin-bottom:12px">
+        <b>1. チャネル別売上（楽天／ヤフー／市場／直販）</b><br>
+        <span style="color:var(--sub)">現状マネフォの売上が「売上高」一本で記帳されており内訳が出せない。
+        <b style="color:var(--ink)">売上高に補助科目（楽天・ヤフー・市場・直販）を作り、記帳時に振り分ける</b>運用に変えれば自動表示できる。
+        記帳担当・税理士と要相談（4〜6月分も振替できれば今期はじめから見える）。</span>
+      </div>
+      <div>
+        <b>2. 売掛金の回収遅延ウォッチ（取引先別）</b><br>
+        <span style="color:var(--sub)">入金消込データが無く、いまは取引先別の遅延判定ができない。
+        <b style="color:var(--ink)">売掛金に補助科目（取引先別）を付けて記帳</b>すれば、取引先別残高から「入金が遅れている先」を自動検知できる。
+        ※全体レベルの警戒（売掛残高が月商の2ヶ月分超）は毎日のLINE日報でアラート済み。</span>
+      </div>
+    </div>
+
     <div class="footer">データ取得: マネーフォワード クラウド会計（公式MCP）／ AI総評は毎日の自動更新時にClaudeが生成 ／ 本ダッシュボードは試作版です</div>
   </main>
 
