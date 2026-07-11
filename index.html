@@ -577,6 +577,10 @@ function fiscalMonths(fyStartYear){
     arr.push({key:yr+"-"+String(mm).padStart(2,"0"),label:MON[i]}); }
   return arr;
 }
+/* 市場別カード専用の金額書式：週次精算は売上2〜3万円・手数料1,600円規模のため
+   万円丸め(man)だと「0万」に潰れる → 円のカンマ区切りで表示（他カードのman()は変更しない） */
+const ichibaYen = n => { const r=Math.round(n); return (r<0?"−":"")+Math.abs(r).toLocaleString("ja-JP"); };  // 24,000
+const ichibaBarLbl = n => n>=100000 ? (n/10000).toFixed(1)+"万" : ichibaYen(n);   // バーは長さ抑制：10万以上は 12.3万
 // CVD配慮パレット（既存の販管費グループ色を流用：青/橙/緑/紫/茶＋補助）
 const ICHIBA_PALETTE=["#3d7fb5","#c08722","#1f9d57","#a5578a","#9a6b3f","#5aa0c4","#c4831c","#7a8a80"];
 function renderIchiba(rows){
@@ -597,14 +601,14 @@ function renderIchiba(rows){
     const colorOf={}; agg.markets.forEach((m,i)=>{ colorOf[m.market]=ICHIBA_PALETTE[i%ICHIBA_PALETTE.length]; });
 
     // ---- 市場別テーブル（売上降順・最下行に合計） ----
-    let h="<tr class='fh'><td>市場</td><td>売上</td><td>手数料等</td><td>手取り</td><td>件数</td></tr>";
+    let h="<tr class='fh'><td>市場</td><td>売上(円)</td><td>手数料等(円)</td><td>手取り(円)</td><td>件数</td></tr>";
     agg.markets.forEach(m=>{
       h+="<tr><td><span class='mkdot' style='background:"+colorOf[m.market]+"'></span>"+esc(m.market)+"</td>"+
-         "<td>"+man(m.sales)+"</td><td style='color:var(--warn)'>"+man(m.fees)+"</td>"+
-         "<td style='font-weight:700'>"+man(m.net)+"</td><td>"+m.count+"</td></tr>";
+         "<td>"+ichibaYen(m.sales)+"</td><td style='color:var(--warn)'>"+ichibaYen(m.fees)+"</td>"+
+         "<td style='font-weight:700'>"+ichibaYen(m.net)+"</td><td>"+m.count+"</td></tr>";
     });
-    h+="<tr style='font-weight:800'><td>合計</td><td>"+man(agg.total.sales)+"</td>"+
-       "<td style='color:var(--warn)'>"+man(agg.total.fees)+"</td><td>"+man(agg.total.net)+"</td>"+
+    h+="<tr style='font-weight:800'><td>合計</td><td>"+ichibaYen(agg.total.sales)+"</td>"+
+       "<td style='color:var(--warn)'>"+ichibaYen(agg.total.fees)+"</td><td>"+ichibaYen(agg.total.net)+"</td>"+
        "<td>"+agg.total.count+"</td></tr>";
     document.getElementById("ichibaTbl").innerHTML=h;
 
@@ -623,11 +627,11 @@ function renderIchiba(rows){
         const barW=Math.max(tot/maxMo*88,2);   // 月合計の横幅（右にラベル余白）
         const segs=agg.markets.filter(m=>(seg[m.market]||0)>0).map(m=>{
           const w=tot>0? (seg[m.market]/tot*100):0;
-          return "<div class='mkseg' style='width:"+w+"%;background:"+colorOf[m.market]+"' title='"+esc(m.market)+" "+man(seg[m.market])+"'></div>";
+          return "<div class='mkseg' style='width:"+w+"%;background:"+colorOf[m.market]+"' title='"+esc(m.market)+" "+ichibaYen(seg[m.market])+"円'></div>";
         }).join("");
         return "<div class='barrow'><div class='m'>"+mo.label+"</div><div class='barpair'>"+
           "<div class='barline'><div class='mkbar' style='width:"+barW+"%'>"+segs+"</div>"+
-          "<span class='bv'>"+man(tot)+"</span></div></div></div>";
+          "<span class='bv'>"+ichibaBarLbl(tot)+"</span></div></div></div>";
       }).join("") || "<div class='sub'>今期の月次データはまだありません。</div>";
     }
   }catch(e){ hide(); }
