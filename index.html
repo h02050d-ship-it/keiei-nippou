@@ -1121,11 +1121,18 @@ function render(d){
         tbl(d.pl,"当期","前年")+
         "<div class='sub' style='margin-top:8px'>※前年は記帳完了後の確定値・今期は記帳途中の月を含むため低めに出ることがあります。前期は棚卸を毎月記帳／今期の原価は仕入のみの点も比較時ご注意。</div>";
     }else pv.innerHTML="<h3 style='font-size:14px'>損益計算書</h3><div class='sub'>次回の自動更新（毎日18時）から表示されます。</div>";
-    if(Array.isArray(d.bsFull)&&d.bsFull.length){
+    // BSだけは日次表示（2026-07-13ユーザー指示）: 履歴からbsFull持ちの最新行（confirmed不問）を使う
+    let bsSrc=d;
+    for(let i=HISTORY.length-1;i>=0;i--){
+      if(Array.isArray(HISTORY[i].bsFull)&&HISTORY[i].bsFull.length){ bsSrc=HISTORY[i]; break; }
+    }
+    if(Array.isArray(bsSrc.bsFull)&&bsSrc.bsFull.length){
+      const daily=(bsSrc.asOf!==d.asOf)||bsSrc.dailyBsPatch;
       bv.innerHTML="<h3 style='font-size:14px;margin-bottom:4px'>貸借対照表（現在 vs 前期末）</h3>"+
-        "<div class='cap'>"+md(d.asOf)+"時点 と 前期末（3/31確定）・単位:万円</div>"+
-        tbl(d.bsFull,"現在","前期末");
-    }else bv.innerHTML="<h3 style='font-size:14px'>貸借対照表</h3><div class='sub'>次回の自動更新（毎日18時）から表示されます。</div>";
+        "<div class='cap'>"+md(bsSrc.asOf)+"時点"+(daily?"（日次・記帳済み分まで反映）":"")+" と 前期末（3/31確定）・単位:万円</div>"+
+        tbl(bsSrc.bsFull,"現在","前期末")+
+        (daily?"<div class='sub' style='margin-top:8px'>※この表のみ日次ベース（借入返済など仕訳した分まで反映）。他のセクションは月次確定（"+md(d.asOf)+"）です。</div>":"");
+    }else bv.innerHTML="<h3 style='font-size:14px'>貸借対照表</h3><div class='sub'>次回の自動更新から表示されます。</div>";
   })();
 
   // ---- 注意書き ----
