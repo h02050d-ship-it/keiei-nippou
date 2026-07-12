@@ -222,6 +222,26 @@
     header .h-sub{display:none}
     .pill{font-size:10px;padding:4px 8px}
   }
+
+  /* ---- 販管費 科目別 円グラフ（ドーナツ）＋ドリルダウン ---- */
+  .sgapie-legend{display:flex;flex-direction:column;gap:2px}
+  .sgapie-row{display:grid;grid-template-columns:14px 1fr auto;gap:8px;align-items:center;
+    padding:6px 7px;border-radius:8px;cursor:pointer;font-size:12px}
+  .sgapie-row:hover{background:var(--panel2)}
+  .sgapie-row.active{background:var(--accent-soft)}
+  .sgapie-row .sw{width:11px;height:11px;border-radius:3px}
+  .sgapie-row .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sgapie-row .amt{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+  .sgapie-row .amt small{display:block;font-size:10px;color:var(--sub);font-weight:600}
+  .sgapie-slice{cursor:pointer;transition:opacity .15s}
+  .sgapie-slice:hover{opacity:.82}
+  .sgapie-slice.active{opacity:.9}
+  .sgadrill{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}
+  .sgadrill-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .sgadrill-head h4{font-size:13px;font-weight:800}
+  .sgadrill-close{background:var(--panel2);border:1px solid var(--line);border-radius:7px;
+    width:24px;height:24px;cursor:pointer;font-size:14px;color:var(--sub);line-height:1;flex:0 0 auto}
+  .sgadrill-close:hover{background:var(--line)}
 </style>
 </head>
 <body>
@@ -297,6 +317,21 @@
         <div class="cap">金額の大きい順・費目グループ別に色分け</div>
         <div class="legend" id="feesLegend" style="flex-wrap:wrap"></div>
         <div id="fees"></div>
+      </div>
+    </div>
+
+    <!-- 販管費 科目別 円グラフ（ドーナツ）＋クリックで内訳 -->
+    <div class="section-title" id="sgaPieTitle">販管費の科目別内訳（当期累計・クリックで内訳）</div>
+    <div class="grid twob" id="sgaPieGrid">
+      <div class="card chartcard">
+        <h3>科目別 構成比（ドーナツ）</h3>
+        <div class="cap">金額の大きい上位10科目＋その他。スライスや右の凡例をクリックすると内訳を表示します。</div>
+        <div id="sgaPie"></div>
+      </div>
+      <div class="card">
+        <h3 style="font-size:14px;margin-bottom:8px">科目別 金額・構成比</h3>
+        <div class="sgapie-legend" id="sgaPieLegend"></div>
+        <div id="sgaDrill"></div>
       </div>
     </div>
 
@@ -1103,6 +1138,7 @@ function render(d){
 
   // ---- 市場別売上（他カードの描画を妨げないよう最後に隔離実行） ----
   try{ renderIchiba(ICHIBA); }catch(e){}
+  try{ renderSgaPie(d); }catch(e){}  // 販管費 科目別 円グラフ（データ欠損でも他を壊さない）
   try{ renderKeiei(); }catch(e){}   // 経営コックピット（SNAPSHOT更新に追従）
 }
 
@@ -1382,6 +1418,158 @@ function renderKeieiCustomers(){
       dt.innerHTML=h;
     } else { dt.innerHTML="<tr><td class='ind'>休眠しかけの取引先はありません（または集計中）。</td></tr>"; }
   }
+}
+
+/* =========================================================
+   販管費 科目別 円グラフ（ドーナツ）＋クリックで内訳ドリルダウン
+   ・独立関数 renderSgaPie(d)。sga/sgaFull/sgaDetailが欠けても他カードを壊さない。
+   ・母数=ytd.sgaTotal（妥当なら）。sgaFull無ければ sga＋「その他」でフォールバック。
+   ・色は既存CVD配慮パレット準拠（青/琥珀/緑/梅/茶系）・隣接同系回避＋その他は中立グレー。
+   ========================================================= */
+const SGA_PIE_PALETTE=["#3d7fb5","#c08722","#1f9d57","#a5578a","#9a6b3f","#5aa0c4","#d4874a","#6f8f7e","#7c6bb0","#c15b52"];
+const SGA_OTHER_COLOR="#b8c0ba";
+let SGA_PIE_SLICES=[];      // 現在のスライス（凡例/スライスのidxで参照）
+let SGA_OPEN_NAME=null;     // 開いているドリルダウンの科目名（トグル用）
+
+// 期首月〜asOf月の経過月数（render内 estMonths と同じロジックの独立版）
+function sgaEstMonths(d){
+  try{
+    const p1=String(d.termStart).split("-"), p2=String(d.asOf).split("-");
+    const m=(+p2[0]-+p1[0])*12+(+p2[1]-+p1[1])+1;
+    if(isFinite(m)&&m>0) return m;
+  }catch(e){}
+  const days=Math.max(1,(d&&d.daysElapsed)||1);
+  return Math.max(1,Math.round(days/30.44));
+}
+// ドーナツ1スライスのSVGパス（角度はラジアン・時計回り）
+function donutArc(cx,cy,rO,rI,a0,a1){
+  const large=(a1-a0)>Math.PI?1:0, cos=Math.cos, sin=Math.sin;
+  const x0o=cx+rO*cos(a0), y0o=cy+rO*sin(a0);
+  const x1o=cx+rO*cos(a1), y1o=cy+rO*sin(a1);
+  const x1i=cx+rI*cos(a1), y1i=cy+rI*sin(a1);
+  const x0i=cx+rI*cos(a0), y0i=cy+rI*sin(a0);
+  return "M"+x0o.toFixed(2)+" "+y0o.toFixed(2)+
+    " A"+rO+" "+rO+" 0 "+large+" 1 "+x1o.toFixed(2)+" "+y1o.toFixed(2)+
+    " L"+x1i.toFixed(2)+" "+y1i.toFixed(2)+
+    " A"+rI+" "+rI+" 0 "+large+" 0 "+x0i.toFixed(2)+" "+y0i.toFixed(2)+" Z";
+}
+// 描画用データを組み立て（純粋・DOM非依存）。データ不足なら null。
+function buildSgaPieData(d){
+  if(!d) return null;
+  let src=(Array.isArray(d.sgaFull)&&d.sgaFull.length)? d.sgaFull : (Array.isArray(d.sga)?d.sga:[]);
+  src=src.filter(x=>Array.isArray(x)&&isFinite(+x[1])&&+x[1]>0).map(x=>[String(x[0]),+x[1]]);
+  if(!src.length) return null;
+  src.sort((a,b)=>b[1]-a[1]);
+  const sumSrc=src.reduce((s,x)=>s+x[1],0);
+  const ytdTotal=(d.ytd&&isFinite(+d.ytd.sgaTotal))?+d.ytd.sgaTotal:0;
+  const grand=(ytdTotal>=sumSrc*0.999)?ytdTotal:sumSrc;   // sgaTotalが妥当ならそれを母数に
+  if(grand<=0) return null;
+  const TOPN=10;
+  const top=src.slice(0,TOPN);
+  const rest=src.slice(TOPN);                             // 上位10以外（sgaFull時は実データ）
+  const restSum=rest.reduce((s,x)=>s+x[1],0);
+  const gap=Math.max(0, grand-sumSrc);                    // 母数−拾えた科目合計（未取得科目分）
+  const otherAmt=restSum+gap;
+  const detailMap=(d.sgaDetail&&typeof d.sgaDetail==="object")?d.sgaDetail:{};
+  const slices=top.map((x,i)=>{
+    const nm=x[0], amt=x[1];
+    let det=detailMap[nm];
+    det=(Array.isArray(det)&&det.length)? det.filter(r=>Array.isArray(r)&&isFinite(+r[1])).map(r=>[String(r[0]),+r[1]]) : null;
+    return {name:nm, amt:amt, pct:amt/grand*100, color:SGA_PIE_PALETTE[i%SGA_PIE_PALETTE.length],
+            isOther:false, detail:det, others:null};
+  });
+  if(otherAmt>0){
+    slices.push({name:"その他", amt:otherAmt, pct:otherAmt/grand*100, color:SGA_OTHER_COLOR,
+      isOther:true, detail:null, others: rest.length? rest.map(x=>[x[0],x[1]]) : null});
+  }
+  return {slices:slices, total:grand, monthlyAvg:grand/sgaEstMonths(d)};
+}
+function renderSgaPie(d){
+  const titleEl=document.getElementById("sgaPieTitle");
+  const gridEl=document.getElementById("sgaPieGrid");
+  const pieEl=document.getElementById("sgaPie");
+  const legEl=document.getElementById("sgaPieLegend");
+  if(!gridEl||!pieEl||!legEl) return;
+  const hide=()=>{ if(titleEl)titleEl.classList.add("hidden"); gridEl.classList.add("hidden"); };
+  let data=null; try{ data=buildSgaPieData(d); }catch(e){ data=null; }
+  if(!data){ hide(); SGA_PIE_SLICES=[]; return; }
+  if(titleEl)titleEl.classList.remove("hidden"); gridEl.classList.remove("hidden");
+  SGA_PIE_SLICES=data.slices;
+  if(SGA_OPEN_NAME!=null && !data.slices.some(s=>s.name===SGA_OPEN_NAME)) SGA_OPEN_NAME=null;
+
+  // ---- ドーナツSVG ----
+  const cx=110, cy=110, rO=100, rI=62;
+  let ang=-Math.PI/2, paths="";
+  if(data.slices.length===1){                       // 1枚=全周は半円2つでリング化（arc縮退回避）
+    const s=data.slices[0];
+    paths+="<path class='sgapie-slice' d='"+donutArc(cx,cy,rO,rI,-Math.PI/2,Math.PI/2)+"' fill='"+s.color+"' stroke='#fff' stroke-width='1.5' onclick='showSgaDetail(0)'></path>";
+    paths+="<path class='sgapie-slice' d='"+donutArc(cx,cy,rO,rI,Math.PI/2,Math.PI*1.5)+"' fill='"+s.color+"' stroke='#fff' stroke-width='1.5' onclick='showSgaDetail(0)'></path>";
+  } else {
+    data.slices.forEach((s,i)=>{
+      const a0=ang, a1=ang+(s.pct/100)*Math.PI*2; ang=a1;
+      const active=(s.name===SGA_OPEN_NAME)?" active":"";
+      paths+="<path class='sgapie-slice"+active+"' d='"+donutArc(cx,cy,rO,rI,a0,a1)+"' fill='"+s.color+
+        "' stroke='#fff' stroke-width='1.5' onclick='showSgaDetail("+i+")'><title>"+esc(s.name)+" "+yen(s.amt)+"（"+s.pct.toFixed(1)+"%）</title></path>";
+    });
+  }
+  pieEl.innerHTML=
+    "<svg viewBox='0 0 220 220' style='width:100%;max-width:250px;height:auto;display:block;margin:2px auto 0'>"+
+    paths+
+    "<text x='110' y='97' text-anchor='middle' style='font-size:11px;fill:var(--sub);font-weight:700'>販管費 月平均</text>"+
+    "<text x='110' y='122' text-anchor='middle' style='font-size:24px;fill:var(--ink);font-weight:800'>"+man(data.monthlyAvg)+"</text>"+
+    "<text x='110' y='140' text-anchor='middle' style='font-size:10px;fill:var(--sub)'>累計 "+man(data.total)+"</text>"+
+    "</svg>";
+
+  // ---- 凡例（クリックで内訳） ----
+  legEl.innerHTML=data.slices.map((s,i)=>{
+    const active=(s.name===SGA_OPEN_NAME)?" active":"";
+    return "<div class='sgapie-row"+active+"' onclick='showSgaDetail("+i+")'>"+
+      "<span class='sw' style='background:"+s.color+"'></span>"+
+      "<span class='nm'>"+esc(s.name)+"</span>"+
+      "<span class='amt'>"+yen(s.amt)+"<small>"+s.pct.toFixed(1)+"%</small></span></div>";
+  }).join("");
+
+  renderSgaDrill();   // 開いていたドリルダウンを再描画
+}
+// スライス/凡例クリック：同じものを再クリックで閉じる（トグル）
+function showSgaDetail(idx){
+  const s=SGA_PIE_SLICES[idx]; if(!s) return;
+  SGA_OPEN_NAME=(SGA_OPEN_NAME===s.name)? null : s.name;
+  if(SNAPSHOT){ try{ renderSgaPie(SNAPSHOT); return; }catch(e){} }
+  renderSgaDrill();
+}
+function closeSgaDrill(){
+  SGA_OPEN_NAME=null;
+  if(SNAPSHOT){ try{ renderSgaPie(SNAPSHOT); return; }catch(e){} }
+  renderSgaDrill();
+}
+function renderSgaDrill(){
+  const el=document.getElementById("sgaDrill"); if(!el) return;
+  if(SGA_OPEN_NAME==null){ el.innerHTML=""; return; }
+  const s=SGA_PIE_SLICES.find(x=>x.name===SGA_OPEN_NAME);
+  if(!s){ el.innerHTML=""; return; }
+  const head="<div class='sgadrill-head'><h4>"+esc(s.name)+" の内訳</h4>"+
+    "<button class='sgadrill-close' onclick='closeSgaDrill()' title='閉じる'>×</button></div>";
+  let rows=null; const base=s.amt;
+  if(s.isOther && s.others) rows=s.others;
+  else if(s.detail) rows=s.detail;
+  let body;
+  if(rows && rows.length){
+    rows=rows.slice().sort((a,b)=>b[1]-a[1]);
+    let h="<table class='fin fin4'><tr class='fh'><td>"+(s.isOther?"科目":"内訳")+"</td><td>金額</td><td>構成比</td></tr>";
+    rows.forEach(r=>{
+      const p=base>0?(r[1]/base*100):0;
+      h+="<tr><td style='white-space:normal'>"+esc(r[0])+"</td><td>"+yen(r[1])+"</td>"+
+         "<td style='color:var(--sub)'>"+p.toFixed(1)+"%</td></tr>";
+    });
+    h+="<tr style='font-weight:800'><td>合計</td><td>"+yen(s.amt)+"</td><td>100%</td></tr></table>";
+    body=h;
+  } else {
+    body="<div class='sub' style='line-height:1.7'>"+(s.isOther
+      ? "上位10科目以外の合計です。個別の内訳は次回の月次更新で取得されます。"
+      : "内訳データは次回の月次更新で取得されます。")+"</div>";
+  }
+  el.innerHTML="<div class='sgadrill'>"+head+body+"</div>";
 }
 </script>
 </body>
