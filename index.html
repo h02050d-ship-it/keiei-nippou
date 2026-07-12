@@ -1578,6 +1578,15 @@ function renderSgaDrill(){
   else if(s.detail) rows=s.detail;
   let body;
   if(rows && rows.length){
+    // かっこ書き（用途メモ等）は表示しない（2026-07-13ユーザー指示）。同名になった行は合算
+    if(!s.isOther){
+      const merged={};
+      rows.forEach(r=>{
+        const n=String(r[0]).replace(/[（(][^）)]*[）)]/g,"").trim()||String(r[0]);
+        merged[n]=(merged[n]||0)+r[1];
+      });
+      rows=Object.keys(merged).map(k=>[k,merged[k]]);
+    }
     rows=rows.slice().sort((a,b)=>b[1]-a[1]);
     let h="<table class='fin fin4'><tr class='fh'><td>"+(s.isOther?"科目":"内訳")+"</td><td>金額</td><td>構成比</td></tr>";
     rows.forEach(r=>{
