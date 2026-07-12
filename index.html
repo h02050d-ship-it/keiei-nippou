@@ -320,6 +320,12 @@
         <div class="sub" id="chGross" style="margin-top:8px"></div>
       </div>
     </div>
+    <div class="card" id="chProfitCard" style="margin-top:13px">
+      <h3 style="font-size:14px;margin-bottom:4px">チャネル別 採算比較（推定）</h3>
+      <div class="cap">直近12ヶ月の売上をチャネル別に集計。原価率は同一規格の実測価格倍率から推定（各セルは手動上書き可）。</div>
+      <div class="tscroll"><table class="fin fin4" id="chProfitTable"><tr><td class="ind">読み込み中…</td></tr></table></div>
+      <div class="sub" id="chProfitNote" style="margin-top:9px"></div>
+    </div>
 
     <!-- セクション2: 資金繰り予測（6ヶ月） -->
     <div class="section-title">💴 資金繰り予測（6ヶ月）</div>
@@ -327,11 +333,20 @@
     <div class="grid twob">
       <div class="card">
         <h3 style="font-size:14px;margin-bottom:10px">月末現預金 予測</h3>
+        <div class="costctl" style="margin-bottom:11px">🏦 借入返済（月額）
+          <input id="keieiLoanpay" type="number" min="0" step="1" placeholder="0" onchange="onLoanpay()">
+          <span>万円/月</span>
+        </div>
         <div class="tscroll"><table class="fin fin4" id="cashfcTable"></table></div>
+        <div class="sub" style="margin-top:8px">銀行への毎月返済の合計額を入れると精度が上がります（通帳／マネフォの「長期借入金」返済で確認）。空欄＝0。</div>
       </div>
       <div class="card">
         <h3 style="font-size:14px;margin-bottom:10px">手形決済 予定（支払手形帳より）</h3>
         <table class="fin" id="tegataTable"></table>
+        <div id="utegataWrap" class="hidden" style="margin-top:16px">
+          <h3 style="font-size:14px;margin-bottom:10px">受取手形 入金予定</h3>
+          <table class="fin" id="utegataTable"></table>
+        </div>
       </div>
     </div>
 
@@ -533,6 +548,28 @@ function resetGrossRate(){ localStorage.removeItem(GROSS_KEY); localStorage.remo
 // 経営コックピット側の粗利率入力（同じlocalStorageキーを共有＝上部の実力試算と連動）
 function onKeieiGross(){ const v=parseFloat(document.getElementById("keieiGross").value);
   if(isFinite(v)&&v>1&&v<99){ localStorage.setItem(GROSS_KEY,v); localStorage.removeItem(COST_KEY_OLD); } if(SNAPSHOT) render(SNAPSHOT); renderKeiei(); }
+
+/* ===== チャネル別原価率の手動上書き（localStorage keiei_chrates） =====
+   値は「原価率%」（1〜99）。空欄=自動推定（priceIdxから連立で解いた値）。 */
+const CHRATES_KEY="keiei_chrates", LOANPAY_KEY="keiei_loanpay";
+function chrateNumOrNull(v){ const n=parseFloat(v); return (isFinite(n)&&n>0&&n<100)?n:null; }
+function getChrates(){
+  try{ const o=JSON.parse(localStorage.getItem(CHRATES_KEY)||"{}");
+    return {ts:chrateNumOrNull(o.ts), ec:chrateNumOrNull(o.ec), ichiba:chrateNumOrNull(o.ichiba)};
+  }catch(e){ return {ts:null, ec:null, ichiba:null}; }
+}
+function setChrate(ch,v){
+  const o=getChrates(); if(ch==="ts"||ch==="ec"||ch==="ichiba") o[ch]=chrateNumOrNull(v);
+  try{ localStorage.setItem(CHRATES_KEY, JSON.stringify(o)); }catch(e){}
+  renderKeiei();
+}
+function resetChrates(){ try{ localStorage.removeItem(CHRATES_KEY); }catch(e){} renderKeiei(); }
+/* ===== 借入返済（月額・万円。localStorage keiei_loanpay）。空欄=0 ===== */
+function getLoanpayYen(){ const n=parseFloat(localStorage.getItem(LOANPAY_KEY)); return (isFinite(n)&&n>=0)?n*10000:0; }
+function onLoanpay(){ const v=document.getElementById("keieiLoanpay").value; const n=parseFloat(v);
+  if(v===""||!isFinite(n)||n<0){ try{ localStorage.removeItem(LOANPAY_KEY); }catch(e){} }
+  else { try{ localStorage.setItem(LOANPAY_KEY, n); }catch(e){} }
+  renderKeieiCashflow(); }
 
 /* ===== AIチャット（毎回Claude経由。候補チップはその日の状況に連動） ===== */
 const SUGGEST_BASE=["資金繰りは大丈夫？","なぜ速報と実力で利益が違う？","黒字にするには月いくら必要？","売上を伸ばすには？"];
@@ -1007,8 +1044,25 @@ function render(d){
    ========================================================= */
 function renderKeiei(){
   try{ renderKeieiChannels(); }catch(e){}
+  try{ renderKeieiChannelProfit(); }catch(e){}
   try{ renderKeieiCashflow(); }catch(e){}
   try{ renderKeieiCustomers(); }catch(e){}
+}
+
+// 直近12ヶ月のチャネル別売上（付売/EC/市売）。市売はichiba.net優先、無ければ「全社売上−付売−EC」で推定。
+// renderKeieiChannels（積み上げ）と renderKeieiChannelProfit（採算比較）で共有。KEIEI無しはnull。
+function keieiChannelRows(){
+  if(!KEIEI || !KEIEI.channels) return null;
+  const mon=(KEIEI.channels.monthly||[]).slice(-12);
+  const ichMap={}; ((KEIEI.ichiba&&KEIEI.ichiba.monthly)||[]).forEach(m=>{ ichMap[m.ym]=m.net; });
+  const zMap={}; (ZAIKO_MONTHS||[]).forEach(m=>{ if(isFinite(m.sales)) zMap[m.ym]=m.sales; });
+  return mon.map(m=>{
+    const ts=m.tsukiuri||0, ec=m.ec||0;
+    let ich=0, ichEst=false;
+    if(isFinite(ichMap[m.ym]) && ichMap[m.ym]>0){ ich=ichMap[m.ym]; }
+    else if(isFinite(zMap[m.ym])){ const resid=zMap[m.ym]-ts-ec; ich=resid>0?resid:0; ichEst=(ich>0); }
+    return {ym:m.ym, ts:ts, ec:ec, ich:ich, ichEst:ichEst, total:ts+ec+ich};
+  });
 }
 
 // ---- セクション1：チャネル別売上（月次・積み上げ） ----
@@ -1016,20 +1070,11 @@ function renderKeieiChannels(){
   const stackEl=document.getElementById("chStack"), tblEl=document.getElementById("chTable");
   const legEl=document.getElementById("chLegend"), grEl=document.getElementById("chGross");
   if(!stackEl) return;
-  if(!KEIEI || !KEIEI.channels){
+  const rows=keieiChannelRows();
+  if(!rows){
     if(KEIEI_FAIL){ stackEl.innerHTML="<div class='sub'>取得できませんでした。時間をおいて再読み込みしてください。</div>"; }
     return;
   }
-  const mon=(KEIEI.channels.monthly||[]).slice(-12);
-  const ichMap={}; ((KEIEI.ichiba&&KEIEI.ichiba.monthly)||[]).forEach(m=>{ ichMap[m.ym]=m.net; });
-  const zMap={}; (ZAIKO_MONTHS||[]).forEach(m=>{ if(isFinite(m.sales)) zMap[m.ym]=m.sales; });
-  const rows=mon.map(m=>{
-    const ts=m.tsukiuri||0, ec=m.ec||0;
-    let ich=0, ichEst=false;
-    if(isFinite(ichMap[m.ym]) && ichMap[m.ym]>0){ ich=ichMap[m.ym]; }
-    else if(isFinite(zMap[m.ym])){ const resid=zMap[m.ym]-ts-ec; ich=resid>0?resid:0; ichEst=(ich>0); }
-    return {ym:m.ym, ts:ts, ec:ec, ich:ich, ichEst:ichEst, total:ts+ec+ich};
-  });
   const maxT=Math.max(1,...rows.map(r=>r.total));
   stackEl.innerHTML=rows.map(r=>{
     const mlabel=(+r.ym.split("-")[1])+"月";
@@ -1061,6 +1106,65 @@ function renderKeieiChannels(){
   if(grEl) grEl.innerHTML="粗利＝売上×（1−原価率 "+((1-gr)*100).toFixed(1)+"%）。<b>*</b>は市売を「全社売上−付売−EC」で推定した月。運賃・チャネル別原価差は未考慮の概算です。";
 }
 
+// ---- セクション1b：チャネル別 採算比較（推定） ----
+// 全体原価率 r0 と価格倍率 k から連立で付売原価率 x を解く:
+//   付売=x, EC=x/k_ec, 市売=x/k_ich（k=vsTsukiuri, null→1）
+//   Σ(売上ch×原価率ch)=Σ売上×r0  ⇒  x = 総売上×r0 ÷ Σ(売上ch÷k_ch)
+function renderKeieiChannelProfit(){
+  const tblEl=document.getElementById("chProfitTable"), noteEl=document.getElementById("chProfitNote");
+  if(!tblEl) return;
+  const rows=keieiChannelRows();
+  if(!rows){
+    if(KEIEI_FAIL){ tblEl.innerHTML="<tr><td class='ind'>取得できませんでした。</td></tr>"; if(noteEl) noteEl.innerHTML=""; }
+    return;
+  }
+  const sumTs=rows.reduce((s,r)=>s+r.ts,0), sumEc=rows.reduce((s,r)=>s+r.ec,0), sumIch=rows.reduce((s,r)=>s+r.ich,0);
+  const total=sumTs+sumEc+sumIch;
+  const r0=getCostRate();                       // 全体原価率（GROSS_KEY入力を再利用）
+  const pidx=(KEIEI&&KEIEI.priceIdx)||null;
+  const kEc =(pidx&&pidx.ec    &&isFinite(pidx.ec.vsTsukiuri)    &&pidx.ec.vsTsukiuri>0)    ? pidx.ec.vsTsukiuri     : null;
+  const kIch=(pidx&&pidx.ichiba&&isFinite(pidx.ichiba.vsTsukiuri)&&pidx.ichiba.vsTsukiuri>0)? pidx.ichiba.vsTsukiuri : null;
+  const hasIdx=(kEc!=null)||(kIch!=null);
+  const kEcU=kEc!=null?kEc:1, kIchU=kIch!=null?kIch:1;
+  const denom=sumTs + sumEc/kEcU + sumIch/kIchU;
+  const x=(denom>0)? total*r0/denom : r0;       // 付売原価率
+  const autoTs=x, autoEc=x/kEcU, autoIch=x/kIchU;   // priceIdx全nullなら全て=r0
+  const ov=getChrates();
+  const feeRate=(KEIEI&&KEIEI.ichiba&&isFinite(KEIEI.ichiba.feeRate))?KEIEI.ichiba.feeRate:null;
+  let feeNote="";
+  if(feeRate!=null) feeNote="<div style='font-size:10px;color:var(--sub);font-weight:400;margin-top:2px'>※市売売上は精算後(手数料"+(feeRate*100).toFixed(1)+"%控除済)のnet基準</div>";
+  const chans=[
+    {key:"ts",     name:"付売", color:"var(--accent)", sales:sumTs,  auto:autoTs, note:""},
+    {key:"ec",     name:"EC",  color:"var(--brown)",  sales:sumEc,  auto:autoEc, note:""},
+    {key:"ichiba", name:"市売", color:"var(--prev)",   sales:sumIch, auto:autoIch, note:feeNote}
+  ].filter(c=>c.sales>0);
+  const inCss="width:56px;padding:3px 5px;border:1px solid var(--line);border-radius:6px;text-align:right;font-size:14px;font-weight:600;color:var(--ink);background:#fff";
+  const rateOf=c=>(ov[c.key]!=null? ov[c.key]/100 : c.auto);
+  let h="<tr class='fh'><td>チャネル</td><td>12ヶ月売上</td><td>推定原価率</td><td>推定粗利率</td><td>推定粗利額</td></tr>";
+  chans.forEach(c=>{
+    const rate=rateOf(c), gross=c.sales*(1-rate);
+    const inVal=(ov[c.key]!=null? ov[c.key] : "");
+    h+="<tr><td style='white-space:normal'><span class='mkdot' style='background:"+c.color+"'></span>"+c.name+c.note+"</td>"+
+       "<td>"+man(c.sales)+"</td>"+
+       "<td><input type='number' min='1' max='99' step='0.1' style='"+inCss+"' value='"+inVal+"' placeholder='"+(c.auto*100).toFixed(1)+"' onchange=\"setChrate('"+c.key+"',this.value)\"><span style='color:var(--sub);font-size:10px;margin-left:2px'>%</span></td>"+
+       "<td>"+((1-rate)*100).toFixed(1)+"%</td>"+
+       "<td style='color:var(--brown);font-weight:700'>"+man(gross)+"</td></tr>";
+  });
+  const sumGross=chans.reduce((s,c)=>s+c.sales*(1-rateOf(c)),0);
+  const wCost=total>0?(1-sumGross/total):0;
+  h+="<tr style='font-weight:800'><td>合計</td><td>"+man(total)+"</td>"+
+     "<td>"+(wCost*100).toFixed(1)+"%</td><td>"+((1-wCost)*100).toFixed(1)+"%</td>"+
+     "<td style='color:var(--brown)'>"+man(sumGross)+"</td></tr>";
+  tblEl.innerHTML=h;
+  if(noteEl){
+    let note;
+    if(hasIdx){ note="価格倍率は納品書DBの同一規格実測（EC vs 付売 "+((pidx.ec&&pidx.ec.specs)||0)+"規格）。全体原価率 "+(r0*100).toFixed(1)+"% と価格倍率から按分した概算です。"; }
+    else{ note="チャネル別の価格データが不足のため、全体原価率 "+(r0*100).toFixed(1)+"% を全チャネルに適用しています。"; }
+    if(ov.ts!=null||ov.ec!=null||ov.ichiba!=null){ note+=" <a href='javascript:void(0)' onclick='resetChrates()' style='color:var(--brown);font-weight:700'>自動に戻す</a>"; }
+    noteEl.innerHTML=note;
+  }
+}
+
 // ---- セクション2：資金繰り予測（6ヶ月） ----
 function renderKeieiCashflow(){
   const sumEl=document.getElementById("cashfcSummary");
@@ -1082,6 +1186,24 @@ function renderKeieiCashflow(){
     else { tgEl.innerHTML="<tr><td class='ind'>読み込み中…</td></tr>"; }
   }
 
+  // 受取手形の入金予定（実データ・あれば）。予測に「＋手形入金(実)」として加算。
+  const uteg=(KEIEI&&KEIEI.utegata)||null;
+  const utegMap={}; if(uteg&&uteg.byMonth) uteg.byMonth.forEach(m=>{ utegMap[m.ym]=m.amount; });
+  const uwrap=document.getElementById("utegataWrap"), utEl=document.getElementById("utegataTable");
+  if(uwrap && utEl){
+    if(uteg && uteg.byMonth && uteg.byMonth.length){
+      let h="<tr><td class='ind' style='color:var(--sub);font-size:10.5px;font-weight:700'>入金月</td><td style='text-align:right;color:var(--sub);font-size:10.5px;font-weight:700'>手形入金</td></tr>";
+      uteg.byMonth.forEach(m=>{ h+="<tr><td class='ind'>"+m.ym.replace("-","/")+"</td><td style='text-align:right;color:var(--good);font-weight:600'>"+yen(m.amount)+"</td></tr>"; });
+      h+="<tr><td><b>合計</b></td><td style='text-align:right'><b>"+yen(uteg.total)+"</b></td></tr>";
+      utEl.innerHTML=h; uwrap.classList.remove("hidden");
+    } else { uwrap.classList.add("hidden"); }
+  }
+
+  // 借入返済 入力欄を現在値に同期（編集中は触らない）
+  const li=document.getElementById("keieiLoanpay");
+  if(li && document.activeElement!==li){ const lp=parseFloat(localStorage.getItem(LOANPAY_KEY)); li.value=(isFinite(lp)&&lp>=0)?lp:""; }
+  const loanpayYen=getLoanpayYen();
+
   // 予想入金＝直近3確定月の全社売上平均（在庫推定API）。無ければマネフォ月次で代替。
   let inflow=null, inflowSrc="";
   const conf=(ZAIKO_MONTHS||[]).filter(m=>!m.partial && isFinite(m.sales)).slice(-3);
@@ -1099,9 +1221,10 @@ function renderKeieiCashflow(){
     const dt=new Date(base.getFullYear(), base.getMonth()+k, 1);
     const ym=dt.getFullYear()+"-"+("0"+(dt.getMonth()+1)).slice(-2);
     const inf=(inflow!=null)?inflow:0;
+    const utg=utegMap[ym]||0;
     const tg=tegMap[ym]||0;
-    const end=cash+inf-tg-cashFixed;
-    rows.push({ym:ym, inf:inf, tg:tg, fix:cashFixed, end:end});
+    const end=cash+inf+utg-tg-cashFixed-loanpayYen;
+    rows.push({ym:ym, inf:inf, utg:utg, tg:tg, fix:cashFixed, loan:loanpayYen, end:end});
     cash=end;
   }
   let minEnd=Infinity, dangerMon="", warnMon="";
@@ -1110,13 +1233,15 @@ function renderKeieiCashflow(){
     else if(r.end<cashFixed && !warnMon) warnMon=(+r.ym.split("-")[1])+"月"; });
 
   if(tblEl){
-    let h="<tr class='fh'><td>月</td><td>入金予想</td><td>手形</td><td>固定費</td><td>月末残</td></tr>";
+    let h="<tr class='fh'><td>月</td><td>入金見込</td><td>手形入金</td><td>手形決済</td><td>固定費</td><td>借入返済</td><td>月末残</td></tr>";
     rows.forEach(r=>{
       const wcol=r.end<0?"var(--danger)":(r.end<cashFixed?"var(--warn)":"var(--ink)");
       h+="<tr><td>"+r.ym.replace("-","/")+"</td>"+
         "<td>"+(inflow!=null?man(r.inf):"—")+"</td>"+
+        "<td style='color:var(--good)'>"+(r.utg?"+"+man(r.utg):"0")+"</td>"+
         "<td style='color:var(--warn)'>"+(r.tg?"−"+man(r.tg):"0")+"</td>"+
         "<td style='color:var(--sub)'>−"+man(r.fix)+"</td>"+
+        "<td style='color:var(--sub)'>"+(r.loan?"−"+man(r.loan):"0")+"</td>"+
         "<td style='color:"+wcol+";font-weight:800'>"+man(r.end)+"</td></tr>";
     });
     tblEl.innerHTML=h;
@@ -1127,9 +1252,10 @@ function renderKeieiCashflow(){
     else if(dangerMon){ badge="danger"; msg="🚨 "+dangerMon+"に資金ショートの恐れ（月末残がマイナス）。入金前倒し・手形/固定費の調整を検討してください。"; }
     else if(warnMon){ badge="warn"; msg="⚠️ "+warnMon+"に月末残が固定費1ヶ月分（"+man(cashFixed)+"）を下回る見込み。資金に注意。"; }
     else{ badge="good"; msg="✅ 6ヶ月内に資金ショートの兆候はありません。"; }
+    const extra=(uteg&&uteg.byMonth&&uteg.byMonth.length?"受取手形の入金（実）を加算。":"")+(loanpayYen>0?"借入返済 月"+man(loanpayYen)+"を控除。":"");
     sumEl.innerHTML="<div style='display:flex;align-items:center;gap:10px;flex-wrap:wrap'>"+
       "<span class='badge "+badge+"'>資金繰り</span><b style='font-size:14px'>"+msg+"</b></div>"+
-      "<div class='sub' style='margin-top:8px'>開始＝最新スナップショットの現預金 "+man(SNAPSHOT.cashTotal||0)+"。予想入金＝"+(inflowSrc||"—")+"（入金サイト未考慮の概算）。手形は支払手形帳の実データ、固定費は現金固定費 月"+man(cashFixed)+"。</div>";
+      "<div class='sub' style='margin-top:8px'>開始＝最新スナップショットの現預金 "+man(SNAPSHOT.cashTotal||0)+"。予想入金＝"+(inflowSrc||"—")+"（入金サイト未考慮の概算）。手形決済は支払手形帳の実データ、固定費は現金固定費 月"+man(cashFixed)+"。"+extra+"</div>";
   }
 }
 
