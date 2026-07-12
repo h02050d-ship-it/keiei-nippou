@@ -1018,16 +1018,22 @@ function render(d){
       "</div></div>";
   }).join("");
 
-  // ---- 資金テーブル ----
+  // ---- 資金テーブル ----（現預金 → 資産を大きい順 → 負債を大きい順）
   const ct=[];
   d.cash.forEach(c=>ct.push("<tr><td class='ind'>"+c[0]+"</td><td>"+yen(c[1])+"</td></tr>"));
   ct.push("<tr><td><b>現預金 合計</b></td><td><b>"+yen(d.cashTotal)+"</b></td></tr>");
-  ct.push("<tr><td class='ind'>売掛金（回収予定）</td><td style='color:var(--good)'>"+yen(d.bs.urikake)+"</td></tr>");
-  ct.push("<tr><td class='ind'>支払手形（支払予定）</td><td style='color:var(--warn)'>"+yen(d.bs.shiharaiTegata)+"</td></tr>");
-  ct.push("<tr><td class='ind'>短期借入金</td><td style='color:var(--danger)'>"+yen(d.bs.shortLoan)+"</td></tr>");
-  ct.push("<tr><td class='ind'>長期借入金</td><td style='color:var(--danger)'>"+yen(d.bs.longLoan)+"</td></tr>");
-  ct.push("<tr><td class='ind'>商品（棚卸） <span style='font-size:10px;color:var(--warn);font-weight:700'>※前期末のまま・実在庫と差あり</span></td><td>"+yen(d.bs.inventory)+"</td></tr>");
-  if(ZAIKO) ct.push("<tr><td class='ind'>└ 推定在庫 いま <span style='font-size:10px;color:var(--sub)'>（在庫推定ツール連携）</span></td><td style='color:#3d7fb5;font-weight:700'>"+yen(ZAIKO.inv)+"</td></tr>");
+  const ctAssets=[
+    {v:d.bs.inventory, html:"<tr><td class='ind'>商品（棚卸） <span style='font-size:10px;color:var(--warn);font-weight:700'>※前期末のまま・実在庫と差あり</span></td><td>"+yen(d.bs.inventory)+"</td></tr>"+
+      (ZAIKO?"<tr><td class='ind'>└ 推定在庫 いま <span style='font-size:10px;color:var(--sub)'>（在庫推定ツール連携）</span></td><td style='color:#3d7fb5;font-weight:700'>"+yen(ZAIKO.inv)+"</td></tr>":"")},
+    {v:d.bs.urikake, html:"<tr><td class='ind'>売掛金（回収予定）</td><td style='color:var(--good)'>"+yen(d.bs.urikake)+"</td></tr>"}
+  ];
+  const ctDebts=[
+    {v:d.bs.longLoan, html:"<tr><td class='ind'>長期借入金</td><td style='color:var(--danger)'>"+yen(d.bs.longLoan)+"</td></tr>"},
+    {v:d.bs.shortLoan, html:"<tr><td class='ind'>短期借入金</td><td style='color:var(--danger)'>"+yen(d.bs.shortLoan)+"</td></tr>"},
+    {v:d.bs.shiharaiTegata, html:"<tr><td class='ind'>支払手形（支払予定）</td><td style='color:var(--warn)'>"+yen(d.bs.shiharaiTegata)+"</td></tr>"}
+  ];
+  ctAssets.sort((a,b)=>b.v-a.v).forEach(x=>ct.push(x.html));
+  ctDebts.sort((a,b)=>b.v-a.v).forEach(x=>ct.push(x.html));
   document.getElementById("cashtbl").innerHTML=ct.join("");
 
   // ---- 実力値テーブル ----
@@ -1126,11 +1132,21 @@ function render(d){
     for(let i=HISTORY.length-1;i>=0;i--){
       if(Array.isArray(HISTORY[i].bsFull)&&HISTORY[i].bsFull.length){ bsSrc=HISTORY[i]; break; }
     }
+    // 資産・負債それぞれ金額(現在)の大きい順に並べ替え（合計行の位置は維持）
+    function sortBS(rows){
+      const out=[], buf=[]; let k=null;
+      const flush=()=>{ if(buf.length){ buf.sort((a,b)=>b[1]-a[1]); out.push.apply(out,buf); buf.length=0; k=null; } };
+      rows.forEach(r=>{
+        if(r[3]==="asset"||r[3]==="debt"){ if(k&&r[3]!==k) flush(); k=r[3]; buf.push(r); }
+        else { flush(); out.push(r); }
+      });
+      flush(); return out;
+    }
     if(Array.isArray(bsSrc.bsFull)&&bsSrc.bsFull.length){
       const daily=(bsSrc.asOf!==d.asOf)||bsSrc.dailyBsPatch;
       bv.innerHTML="<h3 style='font-size:14px;margin-bottom:4px'>貸借対照表（現在 vs 前期末）</h3>"+
         "<div class='cap'>"+md(bsSrc.asOf)+"時点"+(daily?"（日次・記帳済み分まで反映）":"")+" と 前期末（3/31確定）・単位:万円</div>"+
-        tbl(bsSrc.bsFull,"現在","前期末")+
+        tbl(sortBS(bsSrc.bsFull),"現在","前期末")+
         (daily?"<div class='sub' style='margin-top:8px'>※この表のみ日次ベース（借入返済など仕訳した分まで反映）。他のセクションは月次確定（"+md(d.asOf)+"）です。</div>":"");
     }else bv.innerHTML="<h3 style='font-size:14px'>貸借対照表</h3><div class='sub'>次回の自動更新から表示されます。</div>";
   })();
