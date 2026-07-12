@@ -743,7 +743,7 @@ function renderIchiba(rows){
        "<td style='color:var(--warn)'>"+feePct(agg.total.sales,agg.total.fees)+"</td>"+
        "<td>"+ichibaYen(agg.total.net)+"</td>"+
        "<td>"+agg.total.count+"</td></tr>";
-    h+="<tr><td colspan='6' class='ind' style='font-size:10.5px'>手数料率は市場ごとの実測（精算書の手数料等÷売上）。同じ荷を出しても市場によって手取りが変わる点に注意。</td></tr>";
+    h+="<tr><td colspan='6' class='ind' style='font-size:10.5px'>手数料率は市場ごとの実測（精算書の手数料等÷売上）。同じ荷を出しても市場によって手取りが変わる点に注意。※ナイスは手数料方式でなく当社設定価格に上乗せして販売する方式のため率がほぼ0%（特殊・データ誤りではない）。</td></tr>";
     document.getElementById("ichibaTbl").innerHTML=h;
 
     // ---- 凡例（市場＝色） ----
