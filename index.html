@@ -771,7 +771,7 @@ function render(d){
   const t=d.ytd, e=d.est;
   const days=Math.max(1, d.daysElapsed||1);                     // 期首(経過0日)のゼロ除算ガード
   document.getElementById("hsub").textContent="当期 "+d.fiscalYear+"年度（"+d.termStart+"〜"+(d.fiscalYear+1)+"-03-31）・3月決算";
-  document.getElementById("asof").textContent="📅 "+d.asOf+" 時点";
+  document.getElementById("asof").textContent="📅 "+d.asOf+" 時点"+(d.confirmed?"（月次確定ベース）":"");
   (function(){
     const fmt=function(s){ const p=String(s).split("-"); return (+p[1])+"/"+(+p[2]); };
     const mo=(d.daysElapsed/30.44).toFixed(1);
@@ -822,7 +822,7 @@ function render(d){
       const tc = x.t==="短期"?"s":x.t==="中期"?"m":x.t==="長期"?"l":"m";
       return "<div class='a'><span class='term "+tc+"'>"+x.t+"</span><div>"+x.b+"</div></div>";
     }).join("")+"</div>"+
-    "<div class='sig'>🪵 Claude が "+d.asOf+" 時点までの数字をもとに作成（毎日自動更新）</div>";
+    "<div class='sig'>🪵 Claude が "+d.asOf+" 時点までの数字をもとに作成（"+(d.confirmed?"月次確定ベース・毎月15日更新":"毎日自動更新")+"）</div>";
 
   // ---- 前回記帳比・週間デルタ（スナップショット履歴から） ----
   const fmtMD=s=>{ const p=String(s).split("-"); return (+p[1])+"/"+(+p[2]); };
