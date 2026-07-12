@@ -1215,7 +1215,11 @@ function renderKeieiCashflow(){
   const cashFixed=(SNAPSHOT.est&&SNAPSHOT.est.cashFixedMonthly>0)?SNAPSHOT.est.cashFixedMonthly:5067231;
 
   let cash=SNAPSHOT.cashTotal||0;
-  const base=new Date();
+  // 起点: 月次確定スナップショット（月末残高）なら翌月から、日次なら当月から予測
+  let base=new Date();
+  const am=String(SNAPSHOT.asOf||"").match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(SNAPSHOT.confirmed && am){ base=new Date(+am[1], +am[2], 1); }   // asOf月の翌月1日
+  else { base=new Date(base.getFullYear(), base.getMonth(), 1); }
   const rows=[];
   for(let k=0;k<6;k++){
     const dt=new Date(base.getFullYear(), base.getMonth()+k, 1);
@@ -1255,7 +1259,7 @@ function renderKeieiCashflow(){
     const extra=(uteg&&uteg.byMonth&&uteg.byMonth.length?"受取手形の入金（実）を加算。":"")+(loanpayYen>0?"借入返済 月"+man(loanpayYen)+"を控除。":"");
     sumEl.innerHTML="<div style='display:flex;align-items:center;gap:10px;flex-wrap:wrap'>"+
       "<span class='badge "+badge+"'>資金繰り</span><b style='font-size:14px'>"+msg+"</b></div>"+
-      "<div class='sub' style='margin-top:8px'>開始＝最新スナップショットの現預金 "+man(SNAPSHOT.cashTotal||0)+"。予想入金＝"+(inflowSrc||"—")+"（入金サイト未考慮の概算）。手形決済は支払手形帳の実データ、固定費は現金固定費 月"+man(cashFixed)+"。"+extra+"</div>";
+      "<div class='sub' style='margin-top:8px'>開始＝現預金 "+man(SNAPSHOT.cashTotal||0)+"（"+esc(SNAPSHOT.asOf||"—")+"時点"+(SNAPSHOT.confirmed?"・月次確定。予測はその翌月から":"")+"）。予想入金＝"+(inflowSrc||"—")+"（入金サイト未考慮の概算）。手形決済は支払手形帳の実データ、固定費は現金固定費 月"+man(cashFixed)+"。"+extra+"</div>";
   }
 }
 
