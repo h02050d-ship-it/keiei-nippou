@@ -572,6 +572,20 @@ function onLoanpay(){ const v=document.getElementById("keieiLoanpay").value; con
   renderKeieiCashflow(); }
 
 /* ===== AIチャット（毎回Claude経由。候補チップはその日の状況に連動） ===== */
+// 今期実費ベースの月次固定費（販管費実績/経過月 ＋ 減価償却）。分岐点・着地見込・実力営業利益の前提を揃えるための共通関数。
+// 今期の販管費がまだ無い期首直後は前期固定費水準にフォールバック。利息は含まない（営業利益ベース）。
+function currentFixedMo(d){
+  const e=d.est||{};
+  let months=1;
+  try{
+    const p1=String(d.termStart).split("-"), p2=String(d.asOf).split("-");
+    const m=(+p2[0]-+p1[0])*12+(+p2[1]-+p1[1])+1;
+    if(isFinite(m)&&m>0) months=m;
+  }catch(e2){}
+  const sga=(d.ytd&&+d.ytd.sgaTotal)||0;
+  if(sga>0) return sga/months+(+e.deprPerMonth||0);
+  return (+e.fixedCostAnnual||0)/12;
+}
 const SUGGEST_BASE=["資金繰りは大丈夫？","なぜ速報と実力で利益が違う？","黒字にするには月いくら必要？","売上を伸ばすには？"];
 function buildSuggest(){
   const d=SNAPSHOT; if(!d) return SUGGEST_BASE;
@@ -580,7 +594,7 @@ function buildSuggest(){
     const e=d.est||{}, days=Math.max(1,d.daysElapsed||1);
     const costRate=(e.cogsRate>0&&e.cogsRate<1)?e.cogsRate:0.432;
     const paceMo=d.ytd.sales/days*30.4;
-    const breakevenMo=(e.fixedCostAnnual||0)/(1-costRate)/12;
+    const breakevenMo=currentFixedMo(d)/(1-costRate);
     const runway=e.cashFixedMonthly>0? d.cashTotal/e.cashFixedMonthly:99;
     const prev=(HISTORY.length>=2 && HISTORY[HISTORY.length-1].asOf===d.asOf)? HISTORY[HISTORY.length-2]:null;
     if(runway<2.5) ctx.push("現預金はあと何ヶ月もつ？");
@@ -809,9 +823,13 @@ function render(d){
   const estOp    = estGross - t.sgaTotal - estDepr;
   const yoyRate  = d.yoy.prevSalesAprMay>0 ? (d.yoy.salesAprMay/d.yoy.prevSalesAprMay-1)*100 : 0;
   const landingSales = t.sales/days*d.termDays;                 // 単純ペース換算
-  const landingOp    = landingSales*grossRate - e.fixedCostAnnual;
-  const breakeven    = e.fixedCostAnnual/grossRate;             // 損益分岐点売上(年)
-  const breakevenMo  = breakeven/12;
+  // 固定費は「今期実費（販管費実績＋減価償却）」で統一（前期ベースだと今期増えたモルダー償却が漏れ、
+  // 分岐点を超えたのに実力営業利益がマイナスという矛盾表示になる。2026-07-12ユーザー指摘で修正）
+  const fixedMoNow   = currentFixedMo(d);
+  const landingOp    = landingSales*grossRate - fixedMoNow*12;
+  const breakevenMo  = fixedMoNow/grossRate;                    // 損益分岐点売上(月)
+  const breakeven    = breakevenMo*12;
+  const breakevenPrevMo = (e.fixedCostAnnual||0)/grossRate/12;  // 参考: 前期固定費ベース
   const runway       = e.cashFixedMonthly>0 ? d.cashTotal/e.cashFixedMonthly : 0;  // 現預金=固定費の何ヶ月分
 
   // ---- AI総評（生成失敗した日でも画面全体を止めない） ----
@@ -883,7 +901,7 @@ function render(d){
     "<div class='row2'><span>前期売上 "+man(d.yoy.prevYearSales)+"</span><span style='color:"+(landVsPrev<0?'var(--danger)':'var(--good)')+";font-weight:700'>"+pct(landVsPrev)+"</span></div>"+
     "<div class='label' style='margin-top:14px;font-size:11px'>実力営業利益（着地見込）</div>"+
     "<div class='bigfig' style='color:"+lcol+"'>"+yen(landingOp)+" <small style='font-size:13px'>("+man(landingOp)+")</small></div>"+
-    "<div class='sub' style='margin-top:6px'>※経過"+d.daysElapsed+"日を単純に年換算。固定費は前期水準ベース・季節変動は未考慮の目安です。</div>";
+    "<div class='sub' style='margin-top:6px'>※経過"+d.daysElapsed+"日を単純に年換算。固定費は今期実績（販管費＋減価償却）ベース・季節変動は未考慮の目安です。</div>";
 
   // ---- 損益分岐点 ----
   const paceMo = t.sales/days*30.4;   // 今のおおよその月商ペース
@@ -892,7 +910,7 @@ function render(d){
   document.getElementById("breakeven").innerHTML =
     "<div class='label'>損益分岐点 売上（黒字に必要な売上・目安）</div>"+
     "<div class='bigfig'>"+man(breakevenMo)+"<span style='font-size:14px;color:var(--sub);font-weight:600'> / 月</span></div>"+
-    "<div class='sub'>年換算 約"+man(breakeven)+"（前期の固定費水準ベース）</div>"+
+    "<div class='sub'>年換算 約"+man(breakeven)+"（今期実費＝販管費実績＋減価償却ベース）　<span style='color:var(--sub)'>参考: 前期固定費ベースなら 月"+man(breakevenPrevMo)+"</span></div>"+
     "<div class='meter'><i style='width:"+fillpct+"%;background:"+(overShort>=0?'var(--good)':'var(--danger)')+"'></i></div>"+
     "<div class='row2'><span>今の月商ペース "+man(paceMo)+"</span><span style='font-weight:700;color:"+(overShort>=0?'var(--good)':'var(--danger)')+"'>"+(overShort>=0?"+":"")+man(overShort)+"</span></div>"+
     "<div class='sub' style='margin-top:10px'>"+
