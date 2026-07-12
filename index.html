@@ -1266,20 +1266,30 @@ function renderKeieiCustomers(){
     if(KEIEI_FAIL){ if(ct)ct.innerHTML="<tr><td class='ind'>取得できませんでした。</td></tr>"; if(dt)dt.innerHTML="<tr><td class='ind'>取得できませんでした。</td></tr>"; }
     return;
   }
-  const cust=(KEIEI.customers||[]).slice(0,10);
+  // 市売は「売れてから」の精算ベース（ichiba.fyByMarket・今期4月〜）で計上。
+  // 納品ベースの市売顧客はランキングから除外（売れ残り・未精算分の混入と二重計上を防ぐ）
+  const nonIchiba=(KEIEI.customers||[]).filter(c=>c.channel!=="市売")
+    .map(c=>({name:c.name, channel:c.channel, sales:c.sales365, prev:c.salesPrev365, last:c.last, settle:false}));
+  const fyStart=(KEIEI.ichiba&&KEIEI.ichiba.fyStart)||"";
+  const mkRows=((KEIEI.ichiba&&KEIEI.ichiba.fyByMarket)||[])
+    .filter(m=>m.sales>0)
+    .map(m=>({name:m.market, channel:"市売", sales:m.sales, prev:0, last:"", settle:true}));
+  const cust=nonIchiba.concat(mkRows).sort((a,b)=>b.sales-a.sales).slice(0,10);
   if(ct){
-    let h="<tr class='fh'><td>取引先</td><td>区分</td><td>365日売上</td><td>前年比</td><td>最終出荷</td></tr>";
+    let h="<tr class='fh'><td>取引先</td><td>区分</td><td>売上</td><td>前年比</td><td>最終出荷</td></tr>";
     cust.forEach(c=>{
       let yoy="—", col="var(--sub)";
-      if(c.salesPrev365>0){ const r=(c.sales365/c.salesPrev365-1)*100; yoy=(r>=0?"+":"")+r.toFixed(0)+"%"; col=r>=0?"var(--good)":"var(--danger)"; }
-      else if(c.sales365>0){ yoy="新規/増"; col="var(--good)"; }
-      h+="<tr><td style='white-space:normal'>"+esc(c.name)+"</td>"+
+      if(c.settle){ yoy="−"; }
+      else if(c.prev>0){ const r=(c.sales/c.prev-1)*100; yoy=(r>=0?"+":"")+r.toFixed(0)+"%"; col=r>=0?"var(--good)":"var(--danger)"; }
+      else if(c.sales>0){ yoy="新規/増"; col="var(--good)"; }
+      h+="<tr><td style='white-space:normal'>"+esc(c.name)+(c.settle?" <span style='color:var(--sub);font-size:10px'>（精算）</span>":"")+"</td>"+
          "<td style='color:var(--sub)'>"+esc(c.channel)+"</td>"+
-         "<td>"+man(c.sales365)+"</td>"+
+         "<td>"+man(c.sales)+"</td>"+
          "<td style='color:"+col+";font-weight:700'>"+yoy+"</td>"+
          "<td style='color:var(--sub)'>"+(c.last?c.last.slice(5).replace("-","/"):"—")+"</td></tr>";
     });
-    ct.innerHTML=h + (cust.length?"":"<tr><td class='ind'>データがありません。</td></tr>");
+    h+="<tr><td colspan='5' class='ind' style='font-size:10.5px'>市売＝精算書ベースの税抜売上（今期"+(fyStart?esc(fyStart.slice(0,7).replace("-","/"))+"〜":"")+"・売れた分のみ計上・前年比は精算データが1期分のため「−」）。ナイスは沼津窓口精算のため各拠点まとめて1行。付売/EC＝納品書ベースの直近365日。</td></tr>";
+    ct.innerHTML=h;
   }
   const dorm=(KEIEI.dormant||[]).slice(0,15);
   if(dt){
