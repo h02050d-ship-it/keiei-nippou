@@ -730,15 +730,20 @@ function renderIchiba(rows){
     const colorOf={}; agg.markets.forEach((m,i)=>{ colorOf[m.market]=ICHIBA_PALETTE[i%ICHIBA_PALETTE.length]; });
 
     // ---- 市場別テーブル（売上降順・最下行に合計） ----
-    let h="<tr class='fh'><td>市場</td><td>売上(円)</td><td>手数料等(円)</td><td>手取り(円)</td><td>件数</td></tr>";
+    const feePct=(s,f)=> s>0 ? (f/s*100).toFixed(1)+"%" : "—";
+    let h="<tr class='fh'><td>市場</td><td>売上(円)</td><td>手数料等(円)</td><td>手数料率</td><td>手取り(円)</td><td>件数</td></tr>";
     agg.markets.forEach(m=>{
       h+="<tr><td><span class='mkdot' style='background:"+colorOf[m.market]+"'></span>"+esc(m.market)+"</td>"+
          "<td>"+ichibaYen(m.sales)+"</td><td style='color:var(--warn)'>"+ichibaYen(m.fees)+"</td>"+
+         "<td style='color:var(--warn);font-weight:700'>"+feePct(m.sales,m.fees)+"</td>"+
          "<td style='font-weight:700'>"+ichibaYen(m.net)+"</td><td>"+m.count+"</td></tr>";
     });
     h+="<tr style='font-weight:800'><td>合計</td><td>"+ichibaYen(agg.total.sales)+"</td>"+
-       "<td style='color:var(--warn)'>"+ichibaYen(agg.total.fees)+"</td><td>"+ichibaYen(agg.total.net)+"</td>"+
+       "<td style='color:var(--warn)'>"+ichibaYen(agg.total.fees)+"</td>"+
+       "<td style='color:var(--warn)'>"+feePct(agg.total.sales,agg.total.fees)+"</td>"+
+       "<td>"+ichibaYen(agg.total.net)+"</td>"+
        "<td>"+agg.total.count+"</td></tr>";
+    h+="<tr><td colspan='6' class='ind' style='font-size:10.5px'>手数料率は市場ごとの実測（精算書の手数料等÷売上）。同じ荷を出しても市場によって手取りが変わる点に注意。</td></tr>";
     document.getElementById("ichibaTbl").innerHTML=h;
 
     // ---- 凡例（市場＝色） ----
@@ -1142,7 +1147,7 @@ function renderKeieiChannelProfit(){
   const ov=getChrates();
   const feeRate=(KEIEI&&KEIEI.ichiba&&isFinite(KEIEI.ichiba.feeRate))?KEIEI.ichiba.feeRate:null;
   let feeNote="";
-  if(feeRate!=null) feeNote="<div style='font-size:10px;color:var(--sub);font-weight:400;margin-top:2px'>※市売売上は精算後(手数料"+(feeRate*100).toFixed(1)+"%控除済)のnet基準</div>";
+  if(feeRate!=null) feeNote="<div style='font-size:10px;color:var(--sub);font-weight:400;margin-top:2px'>※市売売上は各精算書の手取り(net)基準。手数料率は市場ごとに異なり（全体平均"+(feeRate*100).toFixed(1)+"%・市場別は🏬市場別売上カード参照）、その差は金額に反映済み</div>";
   const chans=[
     {key:"ts",     name:"付売", color:"var(--accent)", sales:sumTs,  auto:autoTs, note:""},
     {key:"ec",     name:"EC",  color:"var(--brown)",  sales:sumEc,  auto:autoEc, note:""},
