@@ -735,7 +735,7 @@ function renderIchiba(rows){
     agg.markets.forEach(m=>{
       h+="<tr><td><span class='mkdot' style='background:"+colorOf[m.market]+"'></span>"+esc(m.market)+"</td>"+
          "<td>"+ichibaYen(m.sales)+"</td><td style='color:var(--warn)'>"+ichibaYen(m.fees)+"</td>"+
-         "<td style='color:var(--warn);font-weight:700'>"+feePct(m.sales,m.fees)+"</td>"+
+         "<td style='color:var(--warn);font-weight:700'>"+(m.market.indexOf("ナイス")>=0?"<span style='color:var(--sub);font-weight:600'>契約型</span>":feePct(m.sales,m.fees))+"</td>"+
          "<td style='font-weight:700'>"+ichibaYen(m.net)+"</td><td>"+m.count+"</td></tr>";
     });
     h+="<tr style='font-weight:800'><td>合計</td><td>"+ichibaYen(agg.total.sales)+"</td>"+
@@ -743,7 +743,7 @@ function renderIchiba(rows){
        "<td style='color:var(--warn)'>"+feePct(agg.total.sales,agg.total.fees)+"</td>"+
        "<td>"+ichibaYen(agg.total.net)+"</td>"+
        "<td>"+agg.total.count+"</td></tr>";
-    h+="<tr><td colspan='6' class='ind' style='font-size:10.5px'>手数料率は市場ごとの実測（精算書の手数料等÷売上）。同じ荷を出しても市場によって手取りが変わる点に注意。※ナイスは手数料方式でなく当社設定価格に上乗せして販売する方式のため率がほぼ0%（特殊・データ誤りではない）。</td></tr>";
+    h+="<tr><td colspan='6' class='ind' style='font-size:10.5px'>手数料率は市場ごとの実測（精算書の手数料等÷売上・競り型）。同じ荷を出しても市場によって手取りが変わる点に注意。※ナイスは<b>契約単価型</b>＝仕切価格にナイスのマージンが織り込み済みで競り手数料が存在しないため「契約型」表記（書類上の約0.3%は事務手数料のみ）。競り型の率と直接比較はできません。</td></tr>";
     document.getElementById("ichibaTbl").innerHTML=h;
 
     // ---- 凡例（市場＝色） ----
