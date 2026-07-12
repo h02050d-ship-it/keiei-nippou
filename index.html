@@ -583,7 +583,12 @@ function currentFixedMo(d){
     if(isFinite(m)&&m>0) months=m;
   }catch(e2){}
   const sga=(d.ytd&&+d.ytd.sgaTotal)||0;
-  if(sga>0) return sga/months+(+e.deprPerMonth||0);
+  // 今期から帳簿販管費に減価償却が月次計上されるようになったため、二重計上を防ぐ:
+  // 計上済み分を除外し、償却月額（見込みと計上実績の大きい方）を1回だけ足す（2026-07-13修正）
+  let bookedDepr=0;
+  try{ (d.sga||[]).forEach(function(x){ if(String(x[0]).indexOf("減価償却")>=0) bookedDepr+=(+x[1]||0); }); }catch(e3){}
+  const monthlyDepr=Math.max(+e.deprPerMonth||0, months>0? bookedDepr/months:0);
+  if(sga>0) return (sga-bookedDepr)/months+monthlyDepr;
   return (+e.fixedCostAnnual||0)/12;
 }
 const SUGGEST_BASE=["資金繰りは大丈夫？","なぜ速報と実力で利益が違う？","黒字にするには月いくら必要？","売上を伸ばすには？"];
@@ -830,8 +835,12 @@ function render(d){
     return (isFinite(m)&&m>0)? m : Math.max(1,Math.round(days/30.44));
   })();
   const estGross = t.sales*grossRate;
-  const estDepr  = e.deprPerMonth*estMonths;
-  const estOp    = estGross - t.sgaTotal - estDepr;
+  // 帳簿販管費に計上済みの減価償却を除外し、フル期間分の償却を1回だけ引く（二重計上防止・2026-07-13）
+  const bookedDepr=(d.sga||[]).reduce(function(a,x){ return a+(String(x[0]).indexOf("減価償却")>=0? (+x[1]||0):0); },0);
+  const monthlyDepr=Math.max(+e.deprPerMonth||0, estMonths>0? bookedDepr/estMonths:0);
+  const sgaCash  = t.sgaTotal - bookedDepr;
+  const estDepr  = monthlyDepr*estMonths;
+  const estOp    = estGross - sgaCash - estDepr;
   const yoyRate  = d.yoy.prevSalesAprMay>0 ? (d.yoy.salesAprMay/d.yoy.prevSalesAprMay-1)*100 : 0;
   const landingSales = t.sales/days*d.termDays;                 // 単純ペース換算
   // 固定費は「今期実費（販管費実績＋減価償却）」で統一（前期ベースだと今期増えたモルダー償却が漏れ、
@@ -993,13 +1002,13 @@ function render(d){
     ["＝ 粗利（速報）", t.grossProfit, "b sokuho"],
     ["［試算］売上原価（粗利率 "+(grossRate*100).toFixed(1)+"%で再計算）", -(t.sales*costRate), "sub"],
     ["＝ 粗利（実力試算）", estGross, "b real"],
-    ["▲ 販管費", -t.sgaTotal, "sub"],
-    ["▲ 減価償却 見込（月"+man(e.deprPerMonth)+"×"+estMonths+"ヶ月）", -estDepr, "sub"],
+    ["▲ 販管費（計上済み減価償却 "+man(bookedDepr)+" を除く）", -sgaCash, "sub"],
+    ["▲ 減価償却（月"+man(monthlyDepr)+"×"+estMonths+"ヶ月・全期間分）", -estDepr, "sub"],
     ["＝ 営業利益（実力試算）", estOp, "b real big"],
   ];
   if(ZAIKO){
     const cogsReal = ZAIKO.anchor + t.cogs - ZAIKO.inv;   // 実力原価 = 期首在庫 + 仕入 − 推定期末在庫
-    rt.push(["＝ 営業利益（在庫推定ベース）", t.sales - cogsReal - t.sgaTotal - estDepr, "b zk big"]);
+    rt.push(["＝ 営業利益（在庫推定ベース）", t.sales - cogsReal - sgaCash - estDepr, "b zk big"]);
   }
   // ---- 純損益まで（2026-07-12ユーザー要望）。営業外は帳簿値を使い、一時収入（保険解約等の雑収入）を分けて見せる ----
   {
