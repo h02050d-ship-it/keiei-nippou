@@ -743,7 +743,7 @@ function renderIchiba(rows){
        "<td style='color:var(--warn)'>"+feePct(agg.total.sales,agg.total.fees)+"</td>"+
        "<td>"+ichibaYen(agg.total.net)+"</td>"+
        "<td>"+agg.total.count+"</td></tr>";
-    h+="<tr><td colspan='6' class='ind' style='font-size:10.5px'>手数料率は市場ごとの実測（精算書の手数料等÷売上・競り型）。同じ荷を出しても市場によって手取りが変わる点に注意。※ナイスは<b>契約単価型</b>＝仕切価格にナイスのマージンが織り込み済みで競り手数料が存在しないため「契約型」表記（書類上の約0.3%は事務手数料のみ）。競り型の率と直接比較はできません。</td></tr>";
+    h+="<tr><td colspan='6' class='ind' style='font-size:10.5px'>手数料率は市場ごとの実測（精算書の手数料等÷売上・競り型）。同じ荷を出しても市場によって手取りが変わる点に注意。※ナイスは<b>上乗せ販売方式</b>＝当社の設定価格に上乗せして販売し、当社は設定価格をほぼ満額受領（書類上の約0.3%は事務手数料のみ）。競り手数料が存在しないため「契約型」表記とし、委託方式の率とは直接比較できません。</td></tr>";
     document.getElementById("ichibaTbl").innerHTML=h;
 
     // ---- 凡例（市場＝色） ----
