@@ -990,6 +990,21 @@ function render(d){
     const cogsReal = ZAIKO.anchor + t.cogs - ZAIKO.inv;   // 実力原価 = 期首在庫 + 仕入 − 推定期末在庫
     rt.push(["＝ 営業利益（在庫推定ベース）", t.sales - cogsReal - t.sgaTotal - estDepr, "b zk big"]);
   }
+  // ---- 純損益まで（2026-07-12ユーザー要望）。営業外は帳簿値を使い、一時収入（保険解約等の雑収入）を分けて見せる ----
+  {
+    const oneOff = +t.nonOpOneOff || 0;
+    const nonOpRegular = (t.ordProfit - t.opProfit) - oneOff;   // 支払利息など恒常的な営業外損益
+    const estOrd = estOp + nonOpRegular;                        // 経常（実力試算・一時収入除く）
+    rt.push(["＋ 営業外損益（支払利息など・一時収入除く）", nonOpRegular, "sub"]);
+    rt.push(["＝ 経常利益（実力試算・一時収入除く）", estOrd, "b real"]);
+    if(oneOff !== 0){
+      rt.push(["＋ 一時的な収入（保険解約などの雑収入）", oneOff, "sub"]);
+      rt.push(["＝ 純損益（実力試算・税引前）", estOrd + oneOff, "b real big"]);
+    } else {
+      rt.push(["＝ 純損益（実力試算・税引前）", estOrd, "b real big"]);
+    }
+    rt.push(["（参考）純損益 速報（帳簿のまま・税引前）", (isFinite(+t.netProfit)&&t.netProfit!==0)? t.netProfit : t.ordProfit, "sub sokuho"]);
+  }
   document.getElementById("realtbl").innerHTML = rt.map(r=>{
     const cls=r[2]||"", strong=cls.includes("b");
     // マイナス(控除・赤字)は赤。プラスは行の意味色（実力=茶/速報=青/在庫推定=藍/その他=黒）。
