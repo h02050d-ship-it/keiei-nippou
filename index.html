@@ -964,10 +964,21 @@ function renderRepair(rows){
 
 /* ===== 描画 ===== */
 function render(d){
+  // ---- 日次損益（2026-07-13指示）: 最新の非確定スナップショットが損益(ytd)を持てば、画面全体をそちらで描画。
+  //      AI総評と比較基準は月次確定(dConf)のまま。ytdなしの行（BS日次パッチ）は従来どおりBSD側で拾う。 ----
+  const dConf = d;
+  for(let i=HISTORY.length-1;i>=0;i--){
+    const h=HISTORY[i];
+    if(h && !h.confirmed && h.ytd && h.ytd.sales!=null && h.bs && new Date(h.asOf)>new Date(dConf.asOf)){
+      d = Object.assign({}, dConf, h, {aiReview:dConf.aiReview, aiAsOf:dConf.asOf, confirmed:false, daily:true});
+      if(!h.daysElapsed) d.daysElapsed = Math.max(1, Math.round((new Date(h.asOf)-new Date(dConf.termStart))/86400000)+1);
+      break;
+    }
+  }
   const t=d.ytd, e=d.est;
   const days=Math.max(1, d.daysElapsed||1);                     // 期首(経過0日)のゼロ除算ガード
   document.getElementById("hsub").textContent="当期 "+d.fiscalYear+"年度（"+d.termStart+"〜"+(d.fiscalYear+1)+"-03-31）・3月決算";
-  document.getElementById("asof").textContent="📅 "+d.asOf+" 時点"+(d.confirmed?"（月次確定ベース）":"");
+  document.getElementById("asof").textContent="📅 "+d.asOf+" 時点"+(d.confirmed?"（月次確定ベース）":d.daily?"（日次・記帳済み分まで反映）":"");
   (function(){
     const fmt=function(s){ const p=String(s).split("-"); return (+p[1])+"/"+(+p[2]); };
     const mo=(d.daysElapsed/30.44).toFixed(1);
@@ -1026,7 +1037,7 @@ function render(d){
       const tc = x.t==="短期"?"s":x.t==="中期"?"m":x.t==="長期"?"l":"m";
       return "<div class='a'><span class='term "+tc+"'>"+x.t+"</span><div>"+x.b+"</div></div>";
     }).join("")+"</div>"+
-    "<div class='sig'>🪵 Claude が "+d.asOf+" 時点までの数字をもとに作成（"+(d.confirmed?"月次確定ベース・毎月15日更新":"毎日自動更新")+"）</div>";
+    "<div class='sig'>🪵 Claude が "+(d.aiAsOf||d.asOf)+" 時点までの数字をもとに作成（月次確定ベース・毎月15日更新）</div>";
 
   // ---- 前回記帳比・週間デルタ（スナップショット履歴から） ----
   const fmtMD=s=>{ const p=String(s).split("-"); return (+p[1])+"/"+(+p[2]); };
@@ -1061,14 +1072,16 @@ function render(d){
   // ---- KPI ----
   const kpis=[
     {label:"売上高（当期累計）", val:t.sales, blue:true, delta:{rate:yoyRate, txt:"前年同期比("+(d.yoy.label||"直近確定2ヶ月")+")"},
-     extra: prevSnap? moveHTML(dSales,"前回記帳("+fmtMD(prevSnap.asOf)+")から",true) : ""},
+     extra: d.daily? moveHTML(t.sales-dConf.ytd.sales,"月次確定("+fmtMD(dConf.asOf)+")から",true)
+       : (prevSnap? moveHTML(dSales,"前回記帳("+fmtMD(prevSnap.asOf)+")から",true) : "")},
     {label:"営業利益（実力・試算）", val:estOp, tag:"real", signColor:true, sub:"速報"+man(t.opProfit)+"は棚卸/減価償却 未反映"},
     {label:"現預金残高", val:(BSD?BSD.cashTotal:d.cashTotal), blue:true,
-     sub:(BSD? fmtMD(BSD.asOf)+"時点（日次）・":"")+"固定費の約"+runwayD.toFixed(1)+"ヶ月分（現金支出ベース）",
+     sub:(BSD? fmtMD(BSD.asOf)+"時点（日次）・": d.daily? fmtMD(d.asOf)+"時点（日次）・":"")+"固定費の約"+runwayD.toFixed(1)+"ヶ月分（現金支出ベース）",
      extra: BSD? moveHTML(BSD.cashTotal-d.cashTotal,"月次確定("+fmtMD(d.asOf)+")から",true)
+       : d.daily? moveHTML(d.cashTotal-dConf.cashTotal,"月次確定("+fmtMD(dConf.asOf)+")から",true)
        : (prevSnap? moveHTML(dCash,"前回("+fmtMD(prevSnap.asOf)+")から",true):"")+(weekSnap? moveHTML(wCash,"1週間("+fmtMD(weekSnap.asOf)+")から",true):"")},
     {label:"借入合計", val:bsK.shortLoan+bsK.longLoan, loan:true,
-     sub:"＋支払手形 "+man(bsK.shiharaiTegata)+" / 売掛 "+man(bsK.urikake)+(BSD?"（"+fmtMD(BSD.asOf)+"時点・日次）":"")},
+     sub:"＋支払手形 "+man(bsK.shiharaiTegata)+" / 売掛 "+man(bsK.urikake)+(BSD?"（"+fmtMD(BSD.asOf)+"時点・日次）": d.daily?"（"+fmtMD(d.asOf)+"時点・日次）":"")},
   ];
   document.getElementById("kpis").innerHTML = kpis.map(k=>{
     let dl="";
@@ -1113,33 +1126,11 @@ function render(d){
         : "前期実績：売上 "+man(d.yoy.prevYearSales)+"・営業利益 "+man(d.yoy.prevYearOp)+"。")+
       "<b style='color:var(--ink)'>月商"+man(breakevenMo)+"超え</b>を作るか固定費を下げるかが分岐点。</div>";
 
-  // ---- 今月の進捗（損益分岐点の必要月商に対して） ----
-  // 月次確定モードでは「今月」が存在しない（データは前月末締め）ため非表示にし、2カード構成に組み替える
+  // ---- 今月の進捗カードは廃止（2026-07-13指示・月内の進捗表示は意味が薄いため。常に2カード構成） ----
   (function(){
-    const el=document.getElementById("monthprog"); if(!el) return;
-    if(d.confirmed){
-      el.style.display="none";
-      const t=document.getElementById("shishinTitle"); if(t) t.textContent="今後の指針 — 着地見込 ＆ 損益分岐点";
-      const g=document.getElementById("shishinGrid"); if(g) g.classList.remove("three"), g.classList.add("twob");
-      return;
-    }
-    el.style.display="";
-    const t2=document.getElementById("shishinTitle"); if(t2) t2.textContent="今後の指針 — 着地見込 ＆ 損益分岐点 ＆ 今月の進捗";
-    const g2=document.getElementById("shishinGrid"); if(g2) g2.classList.remove("twob"), g2.classList.add("three");
-    const mi=(+String(d.asOf).split("-")[1]-4+12)%12;
-    const curMonSales=d.monthlySalesCur[mi]||0;
-    const dayOfMon=+String(d.asOf).split("-")[2];
-    const monName=(+String(d.asOf).split("-")[1])+"月";
-    const monPct=Math.min(curMonSales/breakevenMo*100,100);
-    const monGap=breakevenMo-curMonSales;
-    el.innerHTML=
-      "<div class='label'>今月の進捗 — "+monName+"売上 vs 必要月商</div>"+
-      "<div class='bigfig'>"+man(curMonSales)+"<span style='font-size:14px;color:var(--sub);font-weight:600'> / "+man(breakevenMo)+"</span></div>"+
-      "<div class='sub'>"+monName+dayOfMon+"日時点・記帳ベース</div>"+
-      "<div class='meter'><i style='width:"+monPct+"%;background:"+(monGap<=0?'var(--good)':'var(--accent)')+"'></i></div>"+
-      "<div class='row2'><span>達成率 "+Math.round(curMonSales/breakevenMo*100)+"%</span>"+
-      "<span style='font-weight:700;color:"+(monGap<=0?'var(--good)':'var(--ink)')+"'>"+(monGap<=0? "分岐点クリア +"+man(-monGap) : "あと "+man(monGap))+"</span></div>"+
-      "<div class='sub' style='margin-top:10px'>黒字に必要な月商（分岐点）に対して、今月の記帳済み売上がどこまで来たか。</div>";
+    const el=document.getElementById("monthprog"); if(el) el.style.display="none";
+    const st=document.getElementById("shishinTitle"); if(st) st.textContent="今後の指針 — 着地見込 ＆ 損益分岐点";
+    const g=document.getElementById("shishinGrid"); if(g) g.classList.remove("three"), g.classList.add("twob");
   })();
 
   // ---- 月次推移バー（数字は常にバーの右外＝読める。斜線＝集計途中の月） ----
@@ -1160,7 +1151,7 @@ function render(d){
   // ---- 資金テーブル ----（現預金 → 資産を大きい順 → 負債を大きい順。日次BSがあればそちらを表示）
   const PS = BSD || d;
   const ct=[];
-  if(BSD) ct.push("<tr><td colspan='2' style='text-align:left;color:#3d7fb5;font-weight:700;font-size:11px;border-bottom:1px solid var(--line)'>"+fmtMD(BSD.asOf)+"時点（日次・記帳済み分まで反映）</td></tr>");
+  if(BSD||d.daily) ct.push("<tr><td colspan='2' style='text-align:left;color:#3d7fb5;font-weight:700;font-size:11px;border-bottom:1px solid var(--line)'>"+fmtMD(PS.asOf)+"時点（日次・記帳済み分まで反映）</td></tr>");
   PS.cash.slice().sort((a,b)=>b[1]-a[1]).forEach(c=>ct.push("<tr><td class='ind'>"+c[0]+"</td><td style='color:var(--good)'>"+yen(c[1])+"</td></tr>"));
   ct.push("<tr><td><b>現預金 合計</b></td><td style='color:var(--good)'><b>"+yen(PS.cashTotal)+"</b></td></tr>");
   const ctAssets=[
