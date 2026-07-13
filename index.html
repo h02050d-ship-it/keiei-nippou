@@ -312,10 +312,10 @@
     <div class="grid twob">
       <div class="card">
         <h3 style="font-size:14px;margin-bottom:8px">会計値（棚卸反映済み）と実力の照合</h3>
-        <div class="costctl">📊 直近の粗利率
+        <div class="costctl">📊 粗利率（税理士確定）
           <input id="grossRate" type="number" min="1" max="99" step="0.1" onchange="onGrossRate()">
           <span>%</span>
-          <button class="mini" id="grossResetBtn" onclick="resetGrossRate()">前期実績に戻す</button>
+          <button class="mini" id="grossResetBtn" onclick="resetGrossRate()">税理士確定に戻す</button>
         </div>
         <table class="fin" id="realtbl"></table>
       </div>
@@ -1286,7 +1286,7 @@ function render(d){
     "<b>⚠️ この数字の読み方</b><br>"+
     "・<b>在庫（商品 "+man(d.bs.inventory)+"）は推定棚卸で計上済み</b>です（実地棚卸ではないので目安。決算の実地棚卸で確定します）。これにより会計の売上原価が在庫の動きを反映し、粗利率は実力どおり（57.3%）になりました。<br>"+
     "・<b>会計値</b>＝マネフォの試算表。棚卸は反映済みで、残る差は<b>6月分の減価償却（約"+man(monthlyDepr)+"）がまだ未計上</b>な点だけです。これを織り込むと会計の営業利益はほぼトントンになります。<br>"+
-    "・<b>実力試算・着地・損益分岐点</b>＝直近実績の粗利率 "+(grossRate*100).toFixed(1)+"%（初期値は前期実績）・固定費・減価償却を前提にした目安で、確定値ではありません。粗利率の入力欄を変えると全体が再計算されます。正確な年間減価償却（モルダー込み）が固まると精度が上がります。<br>"+
+    "・<b>実力試算・着地・損益分岐点</b>＝<b>税理士確定の粗利率 "+(grossRate*100).toFixed(1)+"%</b>・固定費・減価償却を前提にした目安です。粗利率の入力欄で変更もできます。6月分の減価償却が計上されると精度が上がります。<br>"+
     "・数字は<b>記帳が進んだところまで</b>が反映されます（自動連携を使っていない場合、日報の鮮度は記帳のタイミング次第です）。";
 
   // ---- 市場別売上（他カードの描画を妨げないよう最後に隔離実行） ----
