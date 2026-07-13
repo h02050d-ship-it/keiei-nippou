@@ -1155,8 +1155,15 @@ function render(d){
   PS.cash.slice().sort((a,b)=>b[1]-a[1]).forEach(c=>ct.push("<tr><td class='ind'>"+c[0]+"</td><td style='color:var(--good)'>"+yen(c[1])+"</td></tr>"));
   ct.push("<tr><td><b>現預金 合計</b></td><td style='color:var(--good)'><b>"+yen(PS.cashTotal)+"</b></td></tr>");
   const ctAssets=[
-    {v:PS.bs.inventory, html:"<tr><td class='ind'>商品（棚卸） <span style='font-size:10px;color:var(--sub);font-weight:700'>※推定棚卸で計上済み（実地棚卸ではない）</span></td><td style='color:var(--good)'>"+yen(PS.bs.inventory)+"</td></tr>"+
-      (ZAIKO?"<tr><td class='ind'>└ 推定在庫 いま <span style='font-size:10px;color:var(--sub)'>（在庫推定ツール連携）</span></td><td style='color:#3d7fb5;font-weight:700'>"+yen(ZAIKO.inv)+"</td></tr>":"")},
+    {v:PS.bs.inventory, html:"<tr><td class='ind'>商品（棚卸） <span style='font-size:10px;color:var(--sub);font-weight:700'>※税理士が概算計上（原価率43%）・9月末実地棚卸で確定</span></td><td style='color:var(--good)'>"+yen(PS.bs.inventory)+"</td></tr>"+
+      (function(){
+        if(!ZAIKO) return "";
+        var toolInv=ZAIKO.inv; var am=String(PS.asOf||"").slice(0,7);
+        var zm=(ZAIKO_MONTHS||[]).filter(function(m){return m.ym===am&&isFinite(m.endInv);});
+        if(zm.length) toolInv=zm[0].endInv;
+        var gap=(PS.bs.inventory||0)-toolInv;
+        return "<tr><td class='ind'>└ 在庫推定ツール <span style='font-size:10px;color:var(--sub)'>（原価率50%・"+(gap>=0?"会計より"+man(Math.abs(gap))+"少なめ":"会計より"+man(Math.abs(gap))+"多め")+"）</span></td><td style='color:#3d7fb5;font-weight:700'>"+yen(toolInv)+"</td></tr>";
+      })()},
     {v:PS.bs.urikake, html:"<tr><td class='ind'>売掛金（回収予定）</td><td style='color:var(--good)'>"+yen(PS.bs.urikake)+"</td></tr>"}
   ];
   const ctDebts=[
@@ -1180,8 +1187,12 @@ function render(d){
     ["＝ 営業利益（実力試算）", estOp, "b real big"],
   ];
   if(ZAIKO){
-    const cogsReal = ZAIKO.anchor + t.cogs - ZAIKO.inv;   // 実力原価 = 期首在庫 + 仕入 − 推定期末在庫
-    rt.push(["＝ 営業利益（在庫推定ベース）", t.sales - cogsReal - sgaCash - estDepr, "b zk big"]);
+    // 在庫推定ツール（原価率≈50%）は会計（税理士・原価率43%）より在庫を少なく見る。その差ぶん辛めに見た保守シナリオ。
+    let toolInv=ZAIKO.inv; const am=String(d.asOf).slice(0,7);
+    const zm=(ZAIKO_MONTHS||[]).filter(m=>m.ym===am&&isFinite(m.endInv));
+    if(zm.length) toolInv=zm[0].endInv;
+    const invGap=(PS.bs.inventory||0)-toolInv;   // 会計在庫−ツール在庫（正なら会計が多め＝利益が多めに出ている）
+    if(isFinite(invGap)) rt.push(["＝ 営業利益（在庫を辛め＝在庫推定ツール基準で見た場合）", estOp - invGap, "b zk big"]);
   }
   // ---- 純損益まで（2026-07-12ユーザー要望）。営業外は帳簿値を使い、一時収入（保険解約等の雑収入）を分けて見せる ----
   {
