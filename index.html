@@ -1035,7 +1035,7 @@ function render(d){
   const PS = BSD || d;
   const ct=[];
   if(BSD) ct.push("<tr><td colspan='2' style='text-align:left;color:#3d7fb5;font-weight:700;font-size:11px;border-bottom:1px solid var(--line)'>"+fmtMD(BSD.asOf)+"時点（日次・記帳済み分まで反映）</td></tr>");
-  PS.cash.forEach(c=>ct.push("<tr><td class='ind'>"+c[0]+"</td><td>"+yen(c[1])+"</td></tr>"));
+  PS.cash.slice().sort((a,b)=>b[1]-a[1]).forEach(c=>ct.push("<tr><td class='ind'>"+c[0]+"</td><td>"+yen(c[1])+"</td></tr>"));
   ct.push("<tr><td><b>現預金 合計</b></td><td><b>"+yen(PS.cashTotal)+"</b></td></tr>");
   const ctAssets=[
     {v:PS.bs.inventory, html:"<tr><td class='ind'>商品（棚卸） <span style='font-size:10px;color:var(--warn);font-weight:700'>※前期末のまま・実在庫と差あり</span></td><td>"+yen(PS.bs.inventory)+"</td></tr>"+
