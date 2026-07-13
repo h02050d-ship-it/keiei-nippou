@@ -575,7 +575,7 @@ async function doLogin(){
     const data=await postGAS({action:"login",email:e,pass:p});
     if(data.ok && data.latest){
       SNAPSHOT=data.latest;
-      HISTORY=data.history||[];
+      HISTORY=(data.history||[]).filter(function(h){return h&&h.confirmed;});   // 月次確定分だけ（日次スナップショットは無視・2026-07-14）
       ICHIBA=Array.isArray(data.ichiba)?data.ichiba:[];
       REPAIR=data.repair||[];
       localStorage.setItem(SESSION_KEY,e);
@@ -746,7 +746,7 @@ function showApp(){
   if(!localStorage.getItem(SESSION_KEY)) return;
   const d=localStorage.getItem(DATA_KEY);
   if(d){ try{ SNAPSHOT=JSON.parse(d); }catch(e){} }
-  try{ HISTORY=JSON.parse(localStorage.getItem("nippou_hist")||"[]"); }catch(e){ HISTORY=[]; }
+  try{ HISTORY=(JSON.parse(localStorage.getItem("nippou_hist")||"[]")||[]).filter(function(h){return h&&h.confirmed;}); }catch(e){ HISTORY=[]; }
   try{ ICHIBA=JSON.parse(localStorage.getItem(ICHIBA_KEY)||"[]"); }catch(e){ ICHIBA=[]; }
   if(SNAPSHOT) showApp();              // キャッシュで即表示
   const c=localStorage.getItem(CRED_KEY);  // 背景で最新を取り直す
@@ -756,7 +756,7 @@ function showApp(){
     const data=await postGAS({action:"login",email:cred.e,pass:cred.p});
     if(data && data.ok && data.latest){
       SNAPSHOT=data.latest;
-      HISTORY=data.history||[];
+      HISTORY=(data.history||[]).filter(function(h){return h&&h.confirmed;});   // 月次確定分だけ（日次スナップショットは無視・2026-07-14）
       ICHIBA=Array.isArray(data.ichiba)?data.ichiba:[];
       REPAIR=data.repair||[];
       localStorage.setItem(DATA_KEY,JSON.stringify(data.latest));
@@ -1031,15 +1031,10 @@ function render(d){
     }).join("")+"</div>"+
     "<div class='sig'>🪵 Claude が "+(d.aiAsOf||d.asOf)+" 時点までの数字をもとに作成（月次確定ベース・毎月15日更新）</div>";
 
-  // ---- 前回記帳比・週間デルタ（スナップショット履歴から） ----
+  // ---- 前月確定との比較（確定分だけ・HISTORYは確定snapshotのみ。2026-07-14） ----
   const fmtMD=s=>{ const p=String(s).split("-"); return (+p[1])+"/"+(+p[2]); };
   const hLast=HISTORY.length? HISTORY[HISTORY.length-1] : null;
   const prevSnap=(hLast && hLast.asOf===d.asOf && HISTORY.length>=2)? HISTORY[HISTORY.length-2] : null;
-  let weekSnap=null;
-  if(hLast && hLast.asOf===d.asOf){
-    const curDate=new Date(d.asOf);
-    for(let i=HISTORY.length-2;i>=0;i--){ if((curDate-new Date(HISTORY[i].asOf))/86400000>=6.5){ weekSnap=HISTORY[i]; break; } }
-  }
   function moveHTML(diff, lbl, goodUp){
     if(diff==null || !isFinite(diff)) return "";
     const flat=Math.abs(diff)<10000;
@@ -1049,7 +1044,6 @@ function render(d){
   }
   const dSales=prevSnap? t.sales-prevSnap.ytd.sales : null;
   const dCash =prevSnap? d.cashTotal-prevSnap.cashTotal : null;
-  const wCash =weekSnap? d.cashTotal-weekSnap.cashTotal : null;
 
   // ---- 確定分だけ表示（2026-07-14ユーザー指示：日次表示は廃止。25日頃に先月分を確定して表示）。日次BSは使わない ----
   let BSD=null;
@@ -1060,16 +1054,13 @@ function render(d){
   // ---- KPI ----
   const kpis=[
     {label:"売上高（当期累計）", val:t.sales, blue:true, delta:{rate:yoyRate, txt:"前年同期比("+(d.yoy.label||"直近確定2ヶ月")+")"},
-     extra: d.daily? moveHTML(t.sales-dConf.ytd.sales,"月次確定("+fmtMD(dConf.asOf)+")から",true)
-       : (prevSnap? moveHTML(dSales,"前回記帳("+fmtMD(prevSnap.asOf)+")から",true) : "")},
+     extra: prevSnap? moveHTML(dSales,"前月確定("+fmtMD(prevSnap.asOf)+")から",true) : ""},
     {label:"営業利益（実力・試算）", val:estOp, tag:"real", signColor:true, sub:"会計は"+man(t.opProfit)+"（棚卸反映済み・6月の減価償却"+man(monthlyDepr)+"のみ未計上）"},
-    {label:"現預金残高", val:(BSD?BSD.cashTotal:d.cashTotal), blue:true,
-     sub:(BSD? fmtMD(BSD.asOf)+"時点（日次）・": d.daily? fmtMD(d.asOf)+"時点（日次）・":"")+"固定費の約"+runwayD.toFixed(1)+"ヶ月分（現金支出ベース）",
-     extra: BSD? moveHTML(BSD.cashTotal-d.cashTotal,"月次確定("+fmtMD(d.asOf)+")から",true)
-       : d.daily? moveHTML(d.cashTotal-dConf.cashTotal,"月次確定("+fmtMD(dConf.asOf)+")から",true)
-       : (prevSnap? moveHTML(dCash,"前回("+fmtMD(prevSnap.asOf)+")から",true):"")+(weekSnap? moveHTML(wCash,"1週間("+fmtMD(weekSnap.asOf)+")から",true):"")},
+    {label:"現預金残高", val:d.cashTotal, blue:true,
+     sub:"固定費の約"+runwayD.toFixed(1)+"ヶ月分（現金支出ベース）",
+     extra: prevSnap? moveHTML(dCash,"前月確定("+fmtMD(prevSnap.asOf)+")から",true):""},
     {label:"借入合計", val:bsK.shortLoan+bsK.longLoan, loan:true,
-     sub:"＋支払手形 "+man(bsK.shiharaiTegata)+" / 売掛 "+man(bsK.urikake)+(BSD?"（"+fmtMD(BSD.asOf)+"時点・日次）": d.daily?"（"+fmtMD(d.asOf)+"時点・日次）":"")},
+     sub:"＋支払手形 "+man(bsK.shiharaiTegata)+" / 売掛 "+man(bsK.urikake)},
   ];
   document.getElementById("kpis").innerHTML = kpis.map(k=>{
     let dl="";
