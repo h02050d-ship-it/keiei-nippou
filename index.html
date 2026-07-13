@@ -132,6 +132,7 @@
   .seg.c-ec{background:var(--brown)}
   .seg.c-ich{background:var(--prev)}
   .seg.c-ich.est{background:repeating-linear-gradient(45deg,var(--prev) 0 4px,#9bbdd8 4px 8px)}
+  .seg.c-oth{background:#a5578a}
 
   /* ---- 修理費・設備メンテ ---- */
   .rpsum{display:flex;flex-wrap:wrap;gap:26px;align-items:flex-end;margin-bottom:14px}
@@ -347,7 +348,7 @@
     <div class="grid twob">
       <div class="card chartcard">
         <h3>チャネル別 売上構成（直近12ヶ月）</h3>
-        <div class="cap">付売・EC・市売の積み上げ。市売は精算台帳のnet優先／無い月は「全社売上−付売−EC」の残差を推定。</div>
+        <div class="cap">合計は会計の月次売上に一致。付売・EC＝納品書DB、市売＝精算台帳、その他・直販＝会計との差額（納品書に載らない直販等）。</div>
         <div class="legend" id="chLegend"></div>
         <div id="chStack"><div class="sub">読み込み中…</div></div>
       </div>
@@ -1308,19 +1309,32 @@ function renderKeiei(){
   try{ renderKeieiCustomers(); }catch(e){}
 }
 
-// 直近12ヶ月のチャネル別売上（付売/EC/市売）。市売はichiba.net優先、無ければ「全社売上−付売−EC」で推定。
-// renderKeieiChannels（積み上げ）と renderKeieiChannelProfit（採算比較）で共有。KEIEI無しはnull。
+// 直近12ヶ月のチャネル別売上を「会計の月次売上（真実）」に一致させて分解。
+// 付売/EC＝納品書DB、市売＝精算台帳の総額(gross)、その他・直販＝会計売上−付売−EC−市売（納品書に載らない直販等を吸収）。
+// 会計月次が無い月のみ従来どおりチャネル積上げ。renderKeieiChannels/renderKeieiChannelProfitで共有。
 function keieiChannelRows(){
   if(!KEIEI || !KEIEI.channels) return null;
   const mon=(KEIEI.channels.monthly||[]).slice(-12);
-  const ichMap={}; ((KEIEI.ichiba&&KEIEI.ichiba.monthly)||[]).forEach(m=>{ ichMap[m.ym]=m.net; });
-  const zMap={}; (ZAIKO_MONTHS||[]).forEach(m=>{ if(isFinite(m.sales)) zMap[m.ym]=m.sales; });
+  // 市売は精算台帳の総額(gross)を採用（会計の売上高＝手数料引き前と基準を揃える）
+  const ichMap={}; ((KEIEI.ichiba&&KEIEI.ichiba.monthly)||[]).forEach(m=>{ ichMap[m.ym]= isFinite(m.sales)?m.sales : (m.net||0); });
+  // 会計の月次売上マップ（SNAPSHOTの当期＋前期。4月始まり）
+  const acctMap={};
+  (function(){
+    const S=SNAPSHOT; if(!S) return;
+    const fy=parseInt(String(S.termStart).slice(0,4),10)||0;
+    const fill=(arr,startY)=>{ if(!Array.isArray(arr))return; arr.forEach((v,i)=>{ const mo=((3+i)%12)+1, yr=startY+Math.floor((3+i)/12); const ym=yr+"-"+String(mo).padStart(2,"0"); if(+v>0) acctMap[ym]=+v; }); };
+    fill(S.monthlySalesCur, fy); fill(S.monthlySalesPrev, fy-1);
+  })();
   return mon.map(m=>{
-    const ts=m.tsukiuri||0, ec=m.ec||0;
-    let ich=0, ichEst=false;
-    if(isFinite(ichMap[m.ym]) && ichMap[m.ym]>0){ ich=ichMap[m.ym]; }
-    else if(isFinite(zMap[m.ym])){ const resid=zMap[m.ym]-ts-ec; ich=resid>0?resid:0; ichEst=(ich>0); }
-    return {ym:m.ym, ts:ts, ec:ec, ich:ich, ichEst:ichEst, total:ts+ec+ich};
+    const ts=m.tsukiuri||0, ec=m.ec||0, ich=ichMap[m.ym]||0;
+    const acct=acctMap[m.ym];
+    let oth=0, total, reconciled=false;
+    if(isFinite(acct) && acct>0){
+      const r=acct-ts-ec-ich;
+      if(r>=0){ oth=r; total=acct; reconciled=true; }
+      else { total=ts+ec+ich; }   // 精算/納品が会計を超過（計上タイミング差）→積上げを採用
+    } else { total=ts+ec+ich; }    // 会計月次が無い月は従来どおり
+    return {ym:m.ym, ts:ts, ec:ec, ich:ich, oth:oth, total:total, reconciled:reconciled};
   });
 }
 
@@ -1340,29 +1354,30 @@ function renderKeieiChannels(){
     const segs=[];
     if(r.ts>0)  segs.push({w:r.ts,  cls:"c-ts"});
     if(r.ec>0)  segs.push({w:r.ec,  cls:"c-ec"});
-    if(r.ich>0) segs.push({w:r.ich, cls:"c-ich"+(r.ichEst?" est":"")});
+    if(r.ich>0) segs.push({w:r.ich, cls:"c-ich"});
+    if(r.oth>0) segs.push({w:r.oth, cls:"c-oth"});
     let bar="";
     segs.forEach((s,idx)=>{ bar+="<div class='seg "+s.cls+(idx===segs.length-1?" segend":"")+"' style='width:"+(s.w/maxT*72)+"%'></div>"; });
     return "<div class='barrow'><div class='m'>"+mlabel+"</div>"+
-      "<div class='barline'>"+bar+"<span class='bv'>"+man(r.total)+(r.ichEst?" <span style='color:var(--sub);font-weight:400'>(市売推定)</span>":"")+"</span></div></div>";
+      "<div class='barline'>"+bar+"<span class='bv'>"+man(r.total)+"</span></div></div>";
   }).join("") || "<div class='sub'>データがありません。</div>";
   if(legEl) legEl.innerHTML=
     "<span><i style='background:var(--accent)'></i>付売</span>"+
     "<span><i style='background:var(--brown)'></i>EC</span>"+
     "<span><i style='background:var(--prev)'></i>市売</span>"+
-    "<span><i style='background:repeating-linear-gradient(45deg,var(--prev) 0 3px,#9bbdd8 3px 6px)'></i>市売(推定)</span>";
+    "<span><i style='background:#a5578a'></i>その他・直販</span>";
   // 月次テーブル＋粗利試算
   const gr=1-getCostRate();
   const kg=document.getElementById("keieiGross"); if(kg && document.activeElement!==kg) kg.value=(gr*100).toFixed(1);
-  let h="<tr class='fh'><td>月</td><td>付売</td><td>EC</td><td>市売</td><td>合計</td><td>粗利概算</td></tr>";
+  let h="<tr class='fh'><td>月</td><td>付売</td><td>EC</td><td>市売</td><td>その他・直販</td><td>合計</td><td>粗利概算</td></tr>";
   rows.forEach(r=>{
     h+="<tr><td>"+(+r.ym.split("-")[1])+"月</td><td>"+man(r.ts)+"</td><td>"+man(r.ec)+"</td>"+
-       "<td>"+man(r.ich)+(r.ichEst?"<span style='color:var(--sub)'>*</span>":"")+"</td>"+
-       "<td style='font-weight:700'>"+man(r.total)+"</td>"+
+       "<td>"+man(r.ich)+"</td><td>"+(r.oth>0?man(r.oth):"—")+"</td>"+
+       "<td style='font-weight:700'>"+man(r.total)+(r.reconciled?"":"<span style='color:var(--sub)'>*</span>")+"</td>"+
        "<td style='color:var(--brown)'>"+man(r.total*gr)+"</td></tr>";
   });
   if(tblEl) tblEl.innerHTML=h;
-  if(grEl) grEl.innerHTML="粗利＝売上×（1−原価率 "+((1-gr)*100).toFixed(1)+"%）。<b>*</b>は市売を「全社売上−付売−EC」で推定した月。運賃・チャネル別原価差は未考慮の概算です。";
+  if(grEl) grEl.innerHTML="合計＝会計の月次売上（真実）に一致。<b>市売＝精算台帳の総額</b>、<b>その他・直販＝会計売上−付売−EC−市売</b>（納品書に載らない直販等）。粗利は売上×（1−原価率 "+((1-gr)*100).toFixed(1)+"%）の概算。<b>*</b>は会計月次が未取得でチャネル積上げの月。";
 }
 
 // ---- セクション1b：チャネル別 採算比較（推定） ----
@@ -1377,25 +1392,28 @@ function renderKeieiChannelProfit(){
     if(KEIEI_FAIL){ tblEl.innerHTML="<tr><td class='ind'>取得できませんでした。</td></tr>"; if(noteEl) noteEl.innerHTML=""; }
     return;
   }
-  const sumTs=rows.reduce((s,r)=>s+r.ts,0), sumEc=rows.reduce((s,r)=>s+r.ec,0), sumIch=rows.reduce((s,r)=>s+r.ich,0);
-  const total=sumTs+sumEc+sumIch;
+  const sumTs=rows.reduce((s,r)=>s+r.ts,0), sumEc=rows.reduce((s,r)=>s+r.ec,0), sumIch=rows.reduce((s,r)=>s+r.ich,0), sumOth=rows.reduce((s,r)=>s+r.oth,0);
+  const total=sumTs+sumEc+sumIch+sumOth;
   const r0=getCostRate();                       // 全体原価率（GROSS_KEY入力を再利用）
   const pidx=(KEIEI&&KEIEI.priceIdx)||null;
   const kEc =(pidx&&pidx.ec    &&isFinite(pidx.ec.vsTsukiuri)    &&pidx.ec.vsTsukiuri>0)    ? pidx.ec.vsTsukiuri     : null;
   const kIch=(pidx&&pidx.ichiba&&isFinite(pidx.ichiba.vsTsukiuri)&&pidx.ichiba.vsTsukiuri>0)? pidx.ichiba.vsTsukiuri : null;
   const hasIdx=(kEc!=null)||(kIch!=null);
   const kEcU=kEc!=null?kEc:1, kIchU=kIch!=null?kIch:1;
+  const coreTotal=sumTs+sumEc+sumIch;           // 価格指数のある3チャネル
   const denom=sumTs + sumEc/kEcU + sumIch/kIchU;
-  const x=(denom>0)? total*r0/denom : r0;       // 付売原価率
+  const x=(denom>0)? coreTotal*r0/denom : r0;    // 付売原価率（その他はr0を当てるので合計原価率はr0に一致）
   const autoTs=x, autoEc=x/kEcU, autoIch=x/kIchU;   // priceIdx全nullなら全て=r0
   const ov=getChrates();
   const feeRate=(KEIEI&&KEIEI.ichiba&&isFinite(KEIEI.ichiba.feeRate))?KEIEI.ichiba.feeRate:null;
   let feeNote="";
-  if(feeRate!=null) feeNote="<div style='font-size:10px;color:var(--sub);font-weight:400;margin-top:2px'>※市売売上は各精算書の手取り(net)基準。手数料率は市場ごとに異なり（全体平均"+(feeRate*100).toFixed(1)+"%・市場別は🏬市場別売上カード参照）、その差は金額に反映済み</div>";
+  if(feeRate!=null) feeNote="<div style='font-size:10px;color:var(--sub);font-weight:400;margin-top:2px'>※市売売上は精算書の総額(gross・手数料引き前)基準。手数料（全体平均"+(feeRate*100).toFixed(1)+"%・市場別は🏬市場別売上カード参照）は販管費の支払手数料に計上</div>";
+  const othNote="<div style='font-size:10px;color:var(--sub);font-weight:400;margin-top:2px'>※会計売上から付売・EC・市売を引いた残差（直販等）。原価率は全体値を暫定適用</div>";
   const chans=[
     {key:"ts",     name:"付売", color:"var(--accent)", sales:sumTs,  auto:autoTs, note:""},
     {key:"ec",     name:"EC",  color:"var(--brown)",  sales:sumEc,  auto:autoEc, note:""},
-    {key:"ichiba", name:"市売", color:"var(--prev)",   sales:sumIch, auto:autoIch, note:feeNote}
+    {key:"ichiba", name:"市売", color:"var(--prev)",   sales:sumIch, auto:autoIch, note:feeNote},
+    {key:"oth",    name:"その他・直販", color:"#a5578a", sales:sumOth, auto:r0,      note:othNote}
   ].filter(c=>c.sales>0);
   const inCss="width:56px;padding:3px 5px;border:1px solid var(--line);border-radius:6px;text-align:right;font-size:14px;font-weight:600;color:var(--ink);background:#fff";
   const rateOf=c=>(ov[c.key]!=null? ov[c.key]/100 : c.auto);
