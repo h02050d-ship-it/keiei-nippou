@@ -1197,15 +1197,15 @@ function render(d){
     const oneOff = +t.nonOpOneOff || 0;
     const nonOpRegular = (t.ordProfit - t.opProfit) - oneOff;   // 支払利息など恒常的な営業外損益
     const estOrd = estOp + nonOpRegular;                        // 経常（実力試算・一時収入除く）
-    rt.push(["＋ 営業外損益（支払利息など・一時収入除く）", nonOpRegular, "sub"]);
-    rt.push(["＝ 経常利益（実力試算・一時収入除く）", estOrd, "b real"]);
+    rt.push(["＋ 営業外損益（支払利息など毎年かかるもの）", nonOpRegular, "sub"]);
+    rt.push(["＝ 経常利益（本業の実力。一時的な収入は含まない）", estOrd, "b real"]);
     if(oneOff !== 0){
-      rt.push(["＋ 一時的な収入（保険解約などの雑収入）", oneOff, "sub"]);
-      rt.push(["＝ 純損益（実力試算・税引前）", estOrd + oneOff, "b real big"]);
+      rt.push(["＋ 一時的な収入（保険解約金など・今年だけ入ったお金）", oneOff, "sub"]);
+      rt.push(["＝ 純損益（いま決算した場合の見込み・税金を引く前）", estOrd + oneOff, "b real big"]);
     } else {
-      rt.push(["＝ 純損益（実力試算・税引前）", estOrd, "b real big"]);
+      rt.push(["＝ 純損益（いま決算した場合の見込み・税金を引く前）", estOrd, "b real big"]);
     }
-    rt.push(["（参考）純損益 速報（帳簿のまま・税引前）", (isFinite(+t.netProfit)&&t.netProfit!==0)? t.netProfit : t.ordProfit, "sub sokuho"]);
+    rt.push(["（参考）帳簿上の純損益（在庫・減価償却が未反映のため高めに出る）", (isFinite(+t.netProfit)&&t.netProfit!==0)? t.netProfit : t.ordProfit, "sub sokuho"]);
   }
   document.getElementById("realtbl").innerHTML = rt.map(r=>{
     const cls=r[2]||"", strong=cls.includes("b");
