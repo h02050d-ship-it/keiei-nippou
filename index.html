@@ -310,7 +310,7 @@
     <div class="section-title">利益の実力チェック</div>
     <div class="grid twob">
       <div class="card">
-        <h3 style="font-size:14px;margin-bottom:8px">会計速報 vs 調整後の実力値（試算）</h3>
+        <h3 style="font-size:14px;margin-bottom:8px">会計値（棚卸反映済み）と実力の照合</h3>
         <div class="costctl">📊 直近の粗利率
           <input id="grossRate" type="number" min="1" max="99" step="0.1" onchange="onGrossRate()">
           <span>%</span>
@@ -1073,7 +1073,7 @@ function render(d){
     {label:"売上高（当期累計）", val:t.sales, blue:true, delta:{rate:yoyRate, txt:"前年同期比("+(d.yoy.label||"直近確定2ヶ月")+")"},
      extra: d.daily? moveHTML(t.sales-dConf.ytd.sales,"月次確定("+fmtMD(dConf.asOf)+")から",true)
        : (prevSnap? moveHTML(dSales,"前回記帳("+fmtMD(prevSnap.asOf)+")から",true) : "")},
-    {label:"営業利益（実力・試算）", val:estOp, tag:"real", signColor:true, sub:"速報"+man(t.opProfit)+"は棚卸/減価償却 未反映"},
+    {label:"営業利益（実力・試算）", val:estOp, tag:"real", signColor:true, sub:"会計は"+man(t.opProfit)+"（棚卸反映済み・6月の減価償却"+man(monthlyDepr)+"のみ未計上）"},
     {label:"現預金残高", val:(BSD?BSD.cashTotal:d.cashTotal), blue:true,
      sub:(BSD? fmtMD(BSD.asOf)+"時点（日次）・": d.daily? fmtMD(d.asOf)+"時点（日次）・":"")+"固定費の約"+runwayD.toFixed(1)+"ヶ月分（現金支出ベース）",
      extra: BSD? moveHTML(BSD.cashTotal-d.cashTotal,"月次確定("+fmtMD(d.asOf)+")から",true)
@@ -1154,7 +1154,7 @@ function render(d){
   PS.cash.slice().sort((a,b)=>b[1]-a[1]).forEach(c=>ct.push("<tr><td class='ind'>"+c[0]+"</td><td style='color:var(--good)'>"+yen(c[1])+"</td></tr>"));
   ct.push("<tr><td><b>現預金 合計</b></td><td style='color:var(--good)'><b>"+yen(PS.cashTotal)+"</b></td></tr>");
   const ctAssets=[
-    {v:PS.bs.inventory, html:"<tr><td class='ind'>商品（棚卸） <span style='font-size:10px;color:var(--warn);font-weight:700'>※前期末のまま・実在庫と差あり</span></td><td style='color:var(--good)'>"+yen(PS.bs.inventory)+"</td></tr>"+
+    {v:PS.bs.inventory, html:"<tr><td class='ind'>商品（棚卸） <span style='font-size:10px;color:var(--sub);font-weight:700'>※推定棚卸で計上済み（実地棚卸ではない）</span></td><td style='color:var(--good)'>"+yen(PS.bs.inventory)+"</td></tr>"+
       (ZAIKO?"<tr><td class='ind'>└ 推定在庫 いま <span style='font-size:10px;color:var(--sub)'>（在庫推定ツール連携）</span></td><td style='color:#3d7fb5;font-weight:700'>"+yen(ZAIKO.inv)+"</td></tr>":"")},
     {v:PS.bs.urikake, html:"<tr><td class='ind'>売掛金（回収予定）</td><td style='color:var(--good)'>"+yen(PS.bs.urikake)+"</td></tr>"}
   ];
@@ -1170,10 +1170,10 @@ function render(d){
   // ---- 実力値テーブル ----
   const rt=[
     ["売上高", t.sales, ""],
-    ["▲ 売上原価（速報＝仕入のみ）", -t.cogs, "sub"],
-    ["＝ 粗利（速報）", t.grossProfit, "b sokuho"],
-    ["［試算］売上原価（粗利率 "+(grossRate*100).toFixed(1)+"%で再計算）", -(t.sales*costRate), "sub"],
-    ["＝ 粗利（実力試算）", estGross, "b real"],
+    ["▲ 売上原価（棚卸を推定計上済み）", -t.cogs, "sub"],
+    ["＝ 粗利（会計・棚卸反映後 "+(t.sales>0?(t.grossProfit/t.sales*100).toFixed(1):"—")+"%）", t.grossProfit, "b sokuho"],
+    ["［クロスチェック］粗利率 "+(grossRate*100).toFixed(1)+"%で試算した売上原価", -(t.sales*costRate), "sub"],
+    ["＝ 粗利（試算・上とほぼ一致すれば実力どおり）", estGross, "b real"],
     ["▲ 販管費（計上済み減価償却 "+man(bookedDepr)+" を除く）", -sgaCash, "sub"],
     ["▲ 減価償却（月"+man(monthlyDepr)+"×"+estMonths+"ヶ月・全期間分）", -estDepr, "sub"],
     ["＝ 営業利益（実力試算）", estOp, "b real big"],
@@ -1195,7 +1195,7 @@ function render(d){
     } else {
       rt.push(["＝ 純損益（いま決算した場合の見込み・税金を引く前）", estOrd, "b real big"]);
     }
-    rt.push(["（参考）帳簿上の純損益（在庫・減価償却が未反映のため高めに出る）", (isFinite(+t.netProfit)&&t.netProfit!==0)? t.netProfit : t.ordProfit, "sub sokuho"]);
+    rt.push(["（参考）帳簿上の純損益（棚卸反映済み・6月分の減価償却のみ未計上）", (isFinite(+t.netProfit)&&t.netProfit!==0)? t.netProfit : t.ordProfit, "sub sokuho"]);
   }
   document.getElementById("realtbl").innerHTML = rt.map(r=>{
     const cls=r[2]||"", strong=cls.includes("b");
@@ -1256,7 +1256,7 @@ function render(d){
       pv.innerHTML="<h3 style='font-size:14px;margin-bottom:4px'>損益計算書（当期 vs 前年同期間）</h3>"+
         "<div class='cap'>"+md(d.termStart)+"〜"+md(d.asOf)+" と前年の同じ期間・単位:万円</div>"+
         tbl(d.pl,"当期","前年")+
-        "<div class='sub' style='margin-top:8px'>※前年は記帳完了後の確定値・今期は記帳途中の月を含むため低めに出ることがあります。前期は棚卸を毎月記帳／今期の原価は仕入のみの点も比較時ご注意。</div>";
+        "<div class='sub' style='margin-top:8px'>※今期は棚卸を推定計上済みで原価は在庫の動きを反映（粗利率57.3%）。減価償却は6月分が未計上。前年は実地棚卸の確定値のため、粗利率の差はこの精度差も含みます。</div>";
     }else pv.innerHTML="<h3 style='font-size:14px'>損益計算書</h3><div class='sub'>次回の自動更新（毎日18時）から表示されます。</div>";
     // BSだけは日次表示（2026-07-13ユーザー指示）: 履歴からbsFull持ちの最新行（confirmed不問）を使う
     let bsSrc=d;
@@ -1285,8 +1285,8 @@ function render(d){
   // ---- 注意書き ----
   document.getElementById("caveat").innerHTML =
     "<b>⚠️ この数字の読み方</b><br>"+
-    "・<b>在庫（商品 "+man(d.bs.inventory)+"）は期中の実際の増減が反映されていません。</b>会計上は前期末の棚卸残高のまま動かないため、実在庫とはズレている前提で見てください（決算の実地棚卸で確定します）。<br>"+
-    "・<b>速報</b>＝マネフォの期中の試算表そのまま。<b>期中は棚卸と減価償却が試算表に反映されない</b>ため、粗利・営業利益は実力より良く出ます。<br>"+
+    "・<b>在庫（商品 "+man(d.bs.inventory)+"）は推定棚卸で計上済み</b>です（実地棚卸ではないので目安。決算の実地棚卸で確定します）。これにより会計の売上原価が在庫の動きを反映し、粗利率は実力どおり（57.3%）になりました。<br>"+
+    "・<b>会計値</b>＝マネフォの試算表。棚卸は反映済みで、残る差は<b>6月分の減価償却（約"+man(monthlyDepr)+"）がまだ未計上</b>な点だけです。これを織り込むと会計の営業利益はほぼトントンになります。<br>"+
     "・<b>実力試算・着地・損益分岐点</b>＝直近実績の粗利率 "+(grossRate*100).toFixed(1)+"%（初期値は前期実績）・固定費・減価償却を前提にした目安で、確定値ではありません。粗利率の入力欄を変えると全体が再計算されます。正確な年間減価償却（モルダー込み）が固まると精度が上がります。<br>"+
     "・数字は<b>記帳が進んだところまで</b>が反映されます（自動連携を使っていない場合、日報の鮮度は記帳のタイミング次第です）。";
 
