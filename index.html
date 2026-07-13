@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>株式会社林材木店 ｜ 経営日報</title>
+<title>株式会社林材木店 ｜ 経営月報</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="favicon.svg">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#1f9d57">
-<meta name="apple-mobile-web-app-title" content="経営日報">
+<meta name="apple-mobile-web-app-title" content="経営月報">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <style>
   :root{
@@ -258,7 +258,7 @@
   <div class="loginbox">
     <div class="logo">🪵</div>
     <h1>株式会社林材木店</h1>
-    <p>経営日報ダッシュボード</p>
+    <p>経営月報ダッシュボード</p>
     <div class="loginerr" id="lerr"></div>
     <input id="email" type="text" placeholder="メールアドレス" autocomplete="username" onkeydown="if(event.key==='Enter'&&!event.isComposing&&event.keyCode!==229)doLogin()">
     <input id="pass" type="password" placeholder="パスワード" autocomplete="current-password" onkeydown="if(event.key==='Enter'&&!event.isComposing&&event.keyCode!==229)doLogin()">
@@ -271,7 +271,7 @@
 <div id="app" class="hidden">
   <header>
     <div>
-      <div class="h-title">🪵 林材木店 経営日報</div>
+      <div class="h-title">🪵 林材木店 経営月報</div>
       <div class="h-sub" id="hsub">—</div>
     </div>
     <div class="spacer"></div>
@@ -479,7 +479,7 @@
         <b>2. 売掛金の回収遅延ウォッチ（取引先別）</b><br>
         <span style="color:var(--sub)">入金消込データが無く、いまは取引先別の遅延判定ができない。
         <b style="color:var(--ink)">売掛金に補助科目（取引先別）を付けて記帳</b>すれば、取引先別残高から「入金が遅れている先」を自動検知できる。
-        ※全体レベルの警戒（売掛残高が月商の2ヶ月分超）は毎日のLINE日報でアラート済み。</span>
+        ※全体レベルの警戒（売掛残高が月商の2ヶ月分超）は毎日のLINE安全アラートで通知済み。</span>
       </div>
     </div>
 
@@ -585,7 +585,7 @@ async function doLogin(){
       localStorage.setItem(CRED_KEY,JSON.stringify({e:e,p:p}));
       lerr.textContent=""; showApp();
     }else if(data.ok){
-      lerr.textContent="ログインOK。ただし日報データがまだありません。";
+      lerr.textContent="ログインOK。ただし月報データがまだありません。";
     }else{
       lerr.textContent="メールまたはパスワードが違います";
     }
@@ -1275,7 +1275,7 @@ function render(d){
     "・<b>在庫（商品 "+man(d.bs.inventory)+"）は推定棚卸で計上済み</b>です（実地棚卸ではないので目安。決算の実地棚卸で確定します）。これにより会計の売上原価が在庫の動きを反映し、粗利率は実力どおり（57.3%）になりました。<br>"+
     "・<b>会計値</b>＝マネフォの試算表。棚卸は反映済みで、残る差は<b>6月分の減価償却（約"+man(monthlyDepr)+"）がまだ未計上</b>な点だけです。これを織り込むと会計の営業利益はほぼトントンになります。<br>"+
     "・<b>実力試算・着地・損益分岐点</b>＝<b>税理士確定の粗利率 "+(grossRate*100).toFixed(1)+"%</b>・固定費・減価償却を前提にした目安です。粗利率の入力欄で変更もできます。6月分の減価償却が計上されると精度が上がります。<br>"+
-    "・数字は<b>記帳が進んだところまで</b>が反映されます（自動連携を使っていない場合、日報の鮮度は記帳のタイミング次第です）。";
+    "・数字は<b>記帳が進んだところまで</b>が反映されます（自動連携を使っていない場合、月報の鮮度は記帳のタイミング次第です）。";
 
   // ---- 市場別売上（他カードの描画を妨げないよう最後に隔離実行） ----
   try{ renderIchiba(ICHIBA); }catch(e){}
