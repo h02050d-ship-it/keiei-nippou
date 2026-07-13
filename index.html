@@ -965,16 +965,8 @@ function renderRepair(rows){
 
 /* ===== 描画 ===== */
 function render(d){
-  // ---- 日次損益（2026-07-13指示）: 最新の非確定スナップショットが損益(ytd)を持てば、画面全体をそちらで描画。
-  //      AI総評と比較基準は月次確定(dConf)のまま。ytdなしの行（BS日次パッチ）は従来どおりBSD側で拾う。 ----
+  // ---- 確定分だけ表示（2026-07-14ユーザー指示）: 日次損益の上書きは廃止。常に月次確定スナップショットで描画する ----
   const dConf = d;
-  for(let i=HISTORY.length-1;i>=0;i--){
-    const h=HISTORY[i];
-    if(h && !h.confirmed && h.dailyPL && h.ytd && h.ytd.sales!=null && h.daysElapsed && h.bs && new Date(h.asOf)>new Date(dConf.asOf)){
-      d = Object.assign({}, dConf, h, {aiReview:dConf.aiReview, aiAsOf:dConf.asOf, confirmed:false, daily:true});
-      break;
-    }
-  }
   const t=d.ytd, e=d.est;
   const days=Math.max(1, d.daysElapsed||1);                     // 期首(経過0日)のゼロ除算ガード
   document.getElementById("hsub").textContent="当期 "+d.fiscalYear+"年度（"+d.termStart+"〜"+(d.fiscalYear+1)+"-03-31）・3月決算";
@@ -1059,12 +1051,8 @@ function render(d){
   const dCash =prevSnap? d.cashTotal-prevSnap.cashTotal : null;
   const wCash =weekSnap? d.cashTotal-weekSnap.cashTotal : null;
 
-  // ---- 日次BSソース（銀行残高まわり＝現預金/借入/資金ポジションは記帳した分まで日々反映。2026-07-13指示） ----
+  // ---- 確定分だけ表示（2026-07-14ユーザー指示：日次表示は廃止。25日頃に先月分を確定して表示）。日次BSは使わない ----
   let BSD=null;
-  for(let i=HISTORY.length-1;i>=0;i--){
-    const h=HISTORY[i];
-    if(h && !h.confirmed && h.bs && h.cashTotal!=null && new Date(h.asOf)>new Date(d.asOf)){ BSD=h; break; }
-  }
   const fixedCashMo = runway>0 ? d.cashTotal/runway : 0;                  // 月あたり現金固定費（確定ベースから逆算）
   const runwayD = (BSD && fixedCashMo>0)? BSD.cashTotal/fixedCashMo : runway;
   const bsK = BSD? BSD.bs : d.bs;
