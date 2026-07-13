@@ -133,6 +133,12 @@
   .seg.c-ich{background:var(--prev)}
   .seg.c-ich.est{background:repeating-linear-gradient(45deg,var(--prev) 0 4px,#9bbdd8 4px 8px)}
 
+  /* ---- 修理費・設備メンテ ---- */
+  .rpsum{display:flex;flex-wrap:wrap;gap:26px;align-items:flex-end;margin-bottom:14px}
+  .rpsum .lbl{font-size:11px;color:var(--sub);margin-bottom:3px}
+  .rpsum .big{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+  .rpsum .prevfig{font-size:16px;font-weight:700;color:var(--sub)}
+
   table.fin{width:100%;border-collapse:collapse;font-size:13px}
   table.fin4 td{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
   table.fin4 td:first-child{text-align:left;white-space:normal}
@@ -438,6 +444,25 @@
       </div>
     </div>
 
+    <!-- 修理費・設備メンテ（マネフォ仕訳ベース） -->
+    <div class="section-title hidden" id="repairTitle">🔧 修理費・設備メンテ</div>
+    <div class="grid twob hidden" id="repairCard">
+      <div class="card">
+        <div class="rpsum" id="repairSum"></div>
+        <h3 style="font-size:14px;margin:4px 0 8px">設備別（今期 / 前期）</h3>
+        <div class="tscroll"><table class="fin fin4" id="repairEquipTbl"></table></div>
+        <h3 style="font-size:14px;margin:18px 0 8px">業者別（今期 / 前期）</h3>
+        <div class="tscroll"><table class="fin fin4" id="repairVendorTbl"></table></div>
+      </div>
+      <div class="card chartcard">
+        <h3>月別 修理・メンテ費</h3>
+        <div class="cap">直近15ヶ月の月合計（税込）</div>
+        <div class="legend" id="repairLegend"></div>
+        <div id="repairBars"></div>
+        <div class="sub" id="repairFoot" style="margin-top:11px;line-height:1.6;font-size:10px;color:var(--sub)"></div>
+      </div>
+    </div>
+
     <div class="note" id="caveat"></div>
 
     <!-- 追加予定（やることリスト・データの前提が整い次第実装） -->
@@ -475,6 +500,7 @@ let SNAPSHOT = null;
 let HISTORY  = [];   // 日次スナップショットの履歴（前日比・週間デルタ用）
 let ZAIKO    = null; // 在庫推定（salesboardのAPIから。ログイン後に取得）
 let ICHIBA   = [];   // 市場別売上（精算書ベース）。ログインAPIのichibaフィールドから取得
+let REPAIR   = [];   // 修理費・設備メンテ（マネフォ仕訳ベース）。ログインAPIのrepairフィールドから取得
 let ZAIKO_MONTHS = null;  // 在庫推定APIの月次（全社売上・仕入）。資金繰り＆市売推定に使用
 let ZAIKO_FAIL = false;   // 在庫推定APIの取得失敗フラグ
 let KEIEI    = null; // 経営コックピット集計（納品書DB・手形・市場台帳）
@@ -550,6 +576,7 @@ async function doLogin(){
       SNAPSHOT=data.latest;
       HISTORY=data.history||[];
       ICHIBA=Array.isArray(data.ichiba)?data.ichiba:[];
+      REPAIR=data.repair||[];
       localStorage.setItem(SESSION_KEY,e);
       localStorage.setItem(DATA_KEY,JSON.stringify(data.latest));
       try{ localStorage.setItem("nippou_hist",JSON.stringify(HISTORY)); }catch(e2){}
@@ -730,6 +757,7 @@ function showApp(){
       SNAPSHOT=data.latest;
       HISTORY=data.history||[];
       ICHIBA=Array.isArray(data.ichiba)?data.ichiba:[];
+      REPAIR=data.repair||[];
       localStorage.setItem(DATA_KEY,JSON.stringify(data.latest));
       try{ localStorage.setItem("nippou_hist",JSON.stringify(HISTORY)); }catch(e2){}
       try{ localStorage.setItem(ICHIBA_KEY,JSON.stringify(ICHIBA)); }catch(e2){}
@@ -833,6 +861,104 @@ function renderIchiba(rows){
           "<span class='bv'>"+ichibaBarLbl(tot)+"</span></div></div></div>";
       }).join("") || "<div class='sub'>今期の月次データはまだありません。</div>";
     }
+  }catch(e){ hide(); }
+}
+
+/* ===== 修理費・設備メンテ（マネフォ仕訳ベース） =====
+   fy===2026=今期・fy===2025=前期。equipment==="(内訳展開済み・集計除外)" は全集計から除外。 */
+function renderRepair(rows){
+  const titleEl=document.getElementById("repairTitle");
+  const cardEl=document.getElementById("repairCard");
+  if(!titleEl||!cardEl) return;
+  const hide=()=>{ titleEl.classList.add("hidden"); cardEl.classList.add("hidden"); };
+  try{
+    if(!Array.isArray(rows) || rows.length===0){ hide(); return; }
+    // 集計除外ルール：内訳展開済みの一括仕訳行は全表示から除外
+    const data=rows.filter(r=> r && r.equipment!=="(内訳展開済み・集計除外)");
+    if(data.length===0){ hide(); return; }
+    const isCur=r=>(+r.fy===2026), isPrev=r=>(+r.fy===2025);
+    const amt=r=>(+r.amount)||0;
+    const yen=n=>{ n=Math.round(n); return n===0?"−":ichibaYen(n); };   // 0は「−」・負は「−」符号付き
+    const manLbl=n=>{ const m=n/10000; return (m<0?"−":"")+Math.abs(m).toFixed(1)+"万"; };
+
+    // ---- 今期/前期の総計 ----
+    let curTotal=0, prevTotal=0;
+    data.forEach(r=>{ if(isCur(r)) curTotal+=amt(r); else if(isPrev(r)) prevTotal+=amt(r); });
+
+    titleEl.classList.remove("hidden"); cardEl.classList.remove("hidden");
+
+    // ---- a. サマリ ----
+    const sumEl=document.getElementById("repairSum");
+    if(sumEl) sumEl.innerHTML=
+      "<div><div class='lbl'>今期累計（4月〜）</div><div class='big'>"+ichibaYen(curTotal)+"円</div></div>"+
+      "<div><div class='lbl'>前期(FY2025)合計</div><div class='prevfig'>"+ichibaYen(prevTotal)+"円</div></div>";
+
+    // ---- b. 設備別テーブル（今期+前期の降順） ----
+    const eqMap={};
+    data.forEach(r=>{
+      const e=(r.equipment==null||r.equipment==="")?"未分類(納品書待ち)":String(r.equipment);
+      if(!eqMap[e]) eqMap[e]={eq:e,cur:0,prev:0};
+      if(isCur(r)) eqMap[e].cur+=amt(r); else if(isPrev(r)) eqMap[e].prev+=amt(r);
+    });
+    const eqRows=Object.keys(eqMap).map(k=>eqMap[k]).sort((a,b)=>(b.cur+b.prev)-(a.cur+a.prev)||a.eq.localeCompare(b.eq));
+    let eh="<tr class='fh'><td>設備</td><td>今期(円)</td><td>前期(円)</td></tr>";
+    eqRows.forEach(r=>{
+      const muted=r.eq.indexOf("未分類")>=0;
+      const rs=muted?" style='color:var(--sub)'":"";
+      const note=muted?" <span style='font-size:9.5px;color:var(--sub)'>※納品書取込で展開予定</span>":"";
+      eh+="<tr"+rs+"><td>"+esc(r.eq)+note+"</td><td>"+yen(r.cur)+"</td><td>"+yen(r.prev)+"</td></tr>";
+    });
+    eh+="<tr style='font-weight:800'><td>合計</td><td>"+yen(curTotal)+"</td><td>"+yen(prevTotal)+"</td></tr>";
+    const eqTbl=document.getElementById("repairEquipTbl"); if(eqTbl) eqTbl.innerHTML=eh;
+
+    // ---- c. 業者別テーブル（上位8＋その他） ----
+    const vMap={};
+    data.forEach(r=>{
+      const v=(r.vendor==null||r.vendor==="")?"その他":String(r.vendor);
+      if(!vMap[v]) vMap[v]={v:v,cur:0,prev:0};
+      if(isCur(r)) vMap[v].cur+=amt(r); else if(isPrev(r)) vMap[v].prev+=amt(r);
+    });
+    let vRows=Object.keys(vMap).map(k=>vMap[k]).sort((a,b)=>(b.cur+b.prev)-(a.cur+a.prev)||a.v.localeCompare(b.v));
+    if(vRows.length>9){
+      const top=vRows.slice(0,8);
+      let oc=0,op=0; vRows.slice(8).forEach(x=>{ oc+=x.cur; op+=x.prev; });
+      const ex=top.find(x=>x.v==="その他");
+      if(ex){ ex.cur+=oc; ex.prev+=op; } else { top.push({v:"その他",cur:oc,prev:op}); }
+      vRows=top;
+    }
+    let vh="<tr class='fh'><td>業者</td><td>今期(円)</td><td>前期(円)</td></tr>";
+    vRows.forEach(r=>{
+      const muted=r.v==="その他";
+      const rs=muted?" style='color:var(--sub)'":"";
+      vh+="<tr"+rs+"><td>"+esc(r.v)+"</td><td>"+yen(r.cur)+"</td><td>"+yen(r.prev)+"</td></tr>";
+    });
+    const vTbl=document.getElementById("repairVendorTbl"); if(vTbl) vTbl.innerHTML=vh;
+
+    // ---- d. 月別バー（直近15ヶ月・前期=青／今期=当期色） ----
+    const moMap={};
+    data.forEach(r=>{ if(typeof r.date!=="string"||r.date.length<7) return; const ym=r.date.slice(0,7); moMap[ym]=(moMap[ym]||0)+amt(r); });
+    const yms=Object.keys(moMap).sort().slice(-15);
+    const maxMo=Math.max(1,...yms.map(k=>Math.abs(moMap[k])));
+    const fyOf=ym=>{ const y=+ym.slice(0,4), m=+ym.slice(5,7); return m>=4?y:y-1; };
+    const barsEl=document.getElementById("repairBars");
+    if(barsEl){
+      barsEl.innerHTML=yms.map(ym=>{
+        const v=moMap[ym], cur=(fyOf(ym)===2026);
+        const w=Math.max(Math.abs(v)/maxMo*88,2);
+        return "<div class='barrow'><div class='m'>"+ym.slice(2,4)+"/"+(+ym.slice(5,7))+"</div><div class='barpair'>"+
+          "<div class='barline'><div class='bar "+(cur?"cur":"prev")+"' style='width:"+w+"%'></div>"+
+          "<span class='bv "+(cur?"":"prev")+"'>"+manLbl(v)+"</span></div></div></div>";
+      }).join("") || "<div class='sub'>月次データはまだありません。</div>";
+    }
+
+    // ---- 凡例 ----
+    const lg=document.getElementById("repairLegend");
+    if(lg) lg.innerHTML="<span><i style='background:var(--accent)'></i>今期(FY2026)</span>"+
+                        "<span><i style='background:var(--prev)'></i>前期(FY2025)</span>";
+
+    // ---- e. フッター注記 ----
+    const ft=document.getElementById("repairFoot");
+    if(ft) ft.textContent="※マネフォ仕訳ベース（修繕費＋アツミ商会等の設備関連）。アツミ商会の月次一括分は納品書スキャン取込で設備別に展開予定。金額は税込";
   }catch(e){ hide(); }
 }
 
@@ -1176,6 +1302,7 @@ function render(d){
 
   // ---- 市場別売上（他カードの描画を妨げないよう最後に隔離実行） ----
   try{ renderIchiba(ICHIBA); }catch(e){}
+  try{ renderRepair(REPAIR); }catch(e){}
   try{ renderSgaPie(d); }catch(e){}  // 販管費 科目別 円グラフ（データ欠損でも他を壊さない）
   try{ renderKeiei(); }catch(e){}   // 経営コックピット（SNAPSHOT更新に追従）
 }
