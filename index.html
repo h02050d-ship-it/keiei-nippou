@@ -122,6 +122,22 @@
   /* ---- 市場別売上（精算書ベース） ---- */
   .tscroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
   .mkdot{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  /* ---- 商品×チャネル別 粗利カード ---- */
+  .gsum{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}
+  @media(max-width:640px){.gsum{grid-template-columns:1fr}}
+  .gsum .gs{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel2)}
+  .gsum .gs .h{font-size:11px;color:var(--sub);font-weight:700;display:flex;align-items:center;gap:6px;margin-bottom:6px}
+  .gsum .gs .m{font-size:12px;color:var(--ink);line-height:1.85}
+  .gsum .gs .m b{font-weight:800}
+  .gbadge{font-size:9.5px;font-weight:800;padding:2px 6px;border-radius:999px;white-space:nowrap}
+  .gbadge.auto{background:var(--warn-soft);color:var(--warn);border:1px solid #eed9b0}
+  .gbadge.manual{background:var(--accent-soft);color:var(--accent);border:1px solid #bfe6d0}
+  td.gbest{color:var(--brown);font-weight:800;white-space:nowrap}
+  .costin{width:56px;padding:3px 5px;border:1px solid var(--line);border-radius:6px;text-align:right;font-size:13px;font-weight:600;color:var(--ink);background:#fff}
+  .costin:focus{outline:none;border-color:var(--brown)}
+  .gsub{color:var(--sub);font-size:10px}
+  table.fin4 td.gc{border-left:1px solid var(--line)}
+  table.fin4 tr.fh td.gc{border-left:1px solid var(--line)}
   .mkbar{display:flex;height:14px;border-radius:0 4px 4px 0;overflow:hidden;min-width:3px;flex:0 0 auto}
   .mkseg{height:100%;min-width:1px}
   /* ---- 経営コックピット：横スクロール表・チャネル積み上げバー ---- */
@@ -367,6 +383,20 @@
       <div class="cap">直近12ヶ月の売上をチャネル別に集計。原価率は同一規格の実測価格倍率から推定（各セルは手動上書き可）。</div>
       <div class="tscroll"><table class="fin fin4" id="chProfitTable"><tr><td class="ind">読み込み中…</td></tr></table></div>
       <div class="sub" id="chProfitNote" style="margin-top:9px"></div>
+    </div>
+
+    <div class="card" id="grossCard" style="margin-top:13px;display:none">
+      <h3 style="font-size:14px;margin-bottom:4px">💰 商品×チャネル別 粗利（直近365日）</h3>
+      <div class="cap">原価は初期値＝付売単価×全体原価率の推定。実仕入原価が分かる規格から上書きしてください（原価セルをクリック）。市売は市場別手数料実測値を控除済み。</div>
+      <div class="costctl" style="margin:8px 0 11px">🛒 EC手数料率
+        <input id="ecFeeInput" type="number" min="0" max="40" step="0.1" onchange="onEcFee(this.value)">
+        <span>%</span>
+        <span id="ecFeeState" class="gsub"></span>
+      </div>
+      <div id="grossSummary" class="gsum" style="margin-bottom:12px"></div>
+      <div class="tscroll"><table class="fin fin4" id="grossTable"><tr><td class="ind">読み込み中…</td></tr></table></div>
+      <div style="margin-top:9px"><a href="javascript:void(0)" id="grossToggle" onclick="toggleGrossAll()" class="mini" style="display:none"></a></div>
+      <div class="sub" id="grossNote" style="margin-top:9px"></div>
     </div>
 
     <!-- セクション2: 資金繰り予測（6ヶ月） -->
@@ -1310,8 +1340,105 @@ function render(d){
 function renderKeiei(){
   try{ renderKeieiChannels(); }catch(e){}
   try{ renderKeieiChannelProfit(); }catch(e){}
+  try{ renderKeieiGross(); }catch(e){}
   try{ renderKeieiCashflow(); }catch(e){}
   try{ renderKeieiCustomers(); }catch(e){}
+}
+
+/* ===== 商品×チャネル別 粗利（直近365日・KEIEI.gross） =====
+   旧GAS（gross未実装）ではカード非表示にフォールバック。 */
+let GROSS_ROWS=[];        // 現在描画中の規格配列（原価編集の参照用）
+let GROSS_SHOWALL=false;  // true=全規格表示 / false=上位20
+const GROSS_CH=[{k:"tsuke",name:"付売",color:"var(--accent)"},{k:"ich",name:"市売",color:"var(--prev)"},{k:"ec",name:"EC",color:"var(--brown)"}];
+function renderKeieiGross(){
+  const card=document.getElementById("grossCard"); if(!card) return;
+  const g=(KEIEI&&KEIEI.gross)||null;
+  if(!g||!Array.isArray(g.rows)){ card.style.display="none"; return; }   // 旧GASフォールバック
+  card.style.display="";
+  // EC手数料率の入力欄（フォーカス中は上書きしない）
+  const fe=document.getElementById("ecFeeInput");
+  if(fe && document.activeElement!==fe) fe.value=(g.ecFeeRate*100).toFixed(1);
+  const feState=document.getElementById("ecFeeState");
+  if(feState) feState.textContent="（市場手数料 実測 "+(g.feeRate*100).toFixed(1)+"％／全体原価率 "+(g.costRate*100).toFixed(1)+"％ を控除）";
+
+  // ---- チャネル別 合計サマリ ----
+  const t=g.totals||{};
+  const sumEl=document.getElementById("grossSummary");
+  if(sumEl){
+    sumEl.innerHTML=GROSS_CH.map(function(c){
+      const o=t[c.k]||{sales:0,net:0,gross:0,grossRate:null};
+      return "<div class='gs'><div class='h'><span class='mkdot' style='background:"+c.color+"'></span>"+c.name+"</div>"+
+        "<div class='m'>売上 <b>"+man(o.sales)+"</b><br>手取り <b>"+man(o.net)+"</b><br>推定粗利 <b style='color:var(--brown)'>"+man(o.gross)+"</b>"+
+        " <span class='gsub'>("+(o.grossRate!=null?o.grossRate.toFixed(1)+"%":"—")+")</span></div></div>";
+    }).join("");
+  }
+
+  // ---- 規格別テーブル（売上大きい順・上位20＋トグル） ----
+  GROSS_ROWS=g.rows.slice();
+  const shown=GROSS_SHOWALL?GROSS_ROWS:GROSS_ROWS.slice(0,20);
+  const chLbl={tsuke:"付売",ich:"市売",ec:"EC"};
+  let h="<tr class='fh'><td rowspan='2'>規格</td><td rowspan='2'>原価<br>(円/枚)</td>";
+  GROSS_CH.forEach(function(c){ h+="<td colspan='4' class='gc' style='text-align:center'>"+c.name+"</td>"; });
+  h+="<td rowspan='2' class='gc'>ベスト</td><td rowspan='2'>粗利率</td></tr>";
+  h+="<tr class='fh'>";
+  GROSS_CH.forEach(function(){ h+="<td class='gc'>枚数</td><td>枚単価</td><td>手取単価</td><td>枚粗利</td>"; });
+  h+="</tr>";
+  shown.forEach(function(r,idx){
+    // 行合計（粗利率＝Σ粗利/Σ手取り）
+    let tg=0,tn=0;
+    GROSS_CH.forEach(function(c){ const o=r.channels[c.k]; if(o&&o.sheets>0){ tg+=o.gross; tn+=o.net; } });
+    const grate=tn>0?(tg/tn*100):null;
+    const badge="<span class='gbadge "+(r.costSource==="manual"?"manual'>実測":"auto'>推定")+"</span>";
+    h+="<tr><td style='white-space:normal;max-width:190px'>"+esc(r.name)+"</td>"+
+       "<td><input class='costin' type='number' min='0' step='1' value='"+r.cost+"' onchange=\"setCost("+idx+",this.value)\"><br>"+badge+"</td>";
+    GROSS_CH.forEach(function(c){
+      const o=r.channels[c.k];
+      if(o&&o.sheets>0){
+        h+="<td class='gc'>"+o.sheets.toLocaleString("ja-JP")+"</td><td>"+yen(o.unit)+"</td><td>"+yen(o.netUnit)+"</td>"+
+           "<td style='color:"+(o.gross>=0?"var(--brown)":"var(--danger)")+";font-weight:600'>"+yen(o.gross)+"</td>";
+      }else{ h+="<td class='gc gsub'>—</td><td class='gsub'>—</td><td class='gsub'>—</td><td class='gsub'>—</td>"; }
+    });
+    const bestName=chLbl[r.bestChannel]||"—";
+    const bestColor=(GROSS_CH.filter(function(c){return c.k===r.bestChannel;})[0]||{}).color||"var(--sub)";
+    h+="<td class='gbest gc'><span style='color:"+bestColor+"'>🏆"+bestName+"</span></td>"+
+       "<td style='font-weight:700'>"+(grate!=null?grate.toFixed(1)+"%":"—")+"</td></tr>";
+  });
+  document.getElementById("grossTable").innerHTML=h;
+
+  // トグル
+  const tg=document.getElementById("grossToggle");
+  if(tg){
+    if(GROSS_ROWS.length>20){ tg.style.display=""; tg.textContent=GROSS_SHOWALL?"上位20件だけ表示":("すべて表示（全"+GROSS_ROWS.length+"規格）"); }
+    else tg.style.display="none";
+  }
+  const note=document.getElementById("grossNote");
+  if(note) note.innerHTML="規格＝品名｜等級｜厚×巾×長（1m=910に正規化・枚単価＝金額÷(数量×入数)）。原価は付売単価×全体原価率で自動プレフィルした<b>推定</b>値。実仕入原価を入力すると<b>実測</b>として保存され、以後は自動更新されません。全"+GROSS_ROWS.length+"規格。";
+}
+function toggleGrossAll(){ GROSS_SHOWALL=!GROSS_SHOWALL; renderKeieiGross(); }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]; }); }
+// 原価の手動上書き（source=manual）→再取得して再描画
+function setCost(idx,v){
+  const row=GROSS_ROWS[idx]; if(!row) return;
+  const n=parseFloat(v); if(!isFinite(n)||n<0){ renderKeieiGross(); return; }
+  let cred={}; try{ cred=JSON.parse(localStorage.getItem(CRED_KEY)||"{}"); }catch(e){}
+  if(!cred.e) return;
+  postGAS({action:"costUpsert",email:cred.e,pass:cred.p,key:row.key,cost_per_sheet:n},2)
+    .then(function(){ refreshKeieiGross(); }).catch(function(){});
+}
+// EC手数料率の更新→再取得して再描画
+function onEcFee(v){
+  const n=parseFloat(v); if(!isFinite(n)||n<0||n>=100){ renderKeieiGross(); return; }
+  let cred={}; try{ cred=JSON.parse(localStorage.getItem(CRED_KEY)||"{}"); }catch(e){}
+  if(!cred.e) return;
+  postGAS({action:"costUpsert",email:cred.e,pass:cred.p,ecFeeRate:n/100},2)
+    .then(function(){ refreshKeieiGross(); }).catch(function(){});
+}
+// costUpsert後、keieiをfresh再取得してgrossカードだけ再描画（キャッシュ破棄はサーバー側で実施）
+function refreshKeieiGross(){
+  let cred={}; try{ cred=JSON.parse(localStorage.getItem(CRED_KEY)||"{}"); }catch(e){}
+  if(!cred.e) return;
+  postGAS({action:"keiei",email:cred.e,pass:cred.p,fresh:"1"},2)
+    .then(function(d){ if(d&&d.ok&&d.keiei){ KEIEI=d.keiei; renderKeieiGross(); } }).catch(function(){});
 }
 
 // 直近12ヶ月のチャネル別売上を「会計の月次売上（真実）」に一致させて分解。
