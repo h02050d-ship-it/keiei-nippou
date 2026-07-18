@@ -1388,7 +1388,9 @@ function renderKeieiGross(){
     let tg=0,tn=0;
     GROSS_CH.forEach(function(c){ const o=r.channels[c.k]; if(o&&o.sheets>0){ tg+=o.gross; tn+=o.net; } });
     const grate=tn>0?(tg/tn*100):null;
-    const badge="<span class='gbadge "+(r.costSource==="manual"?"manual'>実測":"auto'>推定")+"</span>";
+    const badge=(r.costSource==="manual")
+      ? "<span class='gbadge manual'>実測<a href='javascript:void(0)' onclick='clearCostRow("+idx+")' title='推定に戻す' style='margin-left:4px;color:var(--danger);text-decoration:none;font-weight:800'>×</a></span>"
+      : "<span class='gbadge auto'>推定</span>";
     h+="<tr><td style='white-space:normal;max-width:190px'>"+esc(r.name)+"</td>"+
        "<td><input class='costin' type='number' min='0' step='1' value='"+r.cost+"' onchange=\"setCost("+idx+",this.value)\"><br>"+badge+"</td>";
     GROSS_CH.forEach(function(c){
@@ -1412,17 +1414,26 @@ function renderKeieiGross(){
     else tg.style.display="none";
   }
   const note=document.getElementById("grossNote");
-  if(note) note.innerHTML="規格＝品名｜等級｜厚×巾×長（1m=910に正規化・枚単価＝金額÷(数量×入数)）。原価は付売単価×全体原価率で自動プレフィルした<b>推定</b>値。実仕入原価を入力すると<b>実測</b>として保存され、以後は自動更新されません。全"+GROSS_ROWS.length+"規格。";
+  if(note) note.innerHTML="規格＝品名｜等級｜厚×巾×長（1m=910に正規化・枚単価＝金額÷(数量×入数)）。原価は付売単価×全体原価率で自動プレフィルした<b>推定</b>値。実仕入原価を入力すると<b>実測</b>として保存され、以後は自動更新されません。実測バッジの<b>×</b>または原価欄を空にすると推定に戻せます。全"+GROSS_ROWS.length+"規格。";
 }
 function toggleGrossAll(){ GROSS_SHOWALL=!GROSS_SHOWALL; renderKeieiGross(); }
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]; }); }
-// 原価の手動上書き（source=manual）→再取得して再描画
+// 原価の手動上書き（source=manual）→再取得して再描画。空入力＝推定に戻す
 function setCost(idx,v){
   const row=GROSS_ROWS[idx]; if(!row) return;
+  if(String(v).trim()===""){ clearCostRow(idx); return; }   // 空入力=手動原価をクリア（推定に戻す）
   const n=parseFloat(v); if(!isFinite(n)||n<0){ renderKeieiGross(); return; }
   let cred={}; try{ cred=JSON.parse(localStorage.getItem(CRED_KEY)||"{}"); }catch(e){}
   if(!cred.e) return;
   postGAS({action:"costUpsert",email:cred.e,pass:cred.p,key:row.key,cost_per_sheet:n},2)
+    .then(function(){ refreshKeieiGross(); }).catch(function(){});
+}
+// 手動原価をクリア＝推定に戻す（cost_masterの行削除→次回集計時にautoで再プレフィル）
+function clearCostRow(idx){
+  const row=GROSS_ROWS[idx]; if(!row) return;
+  let cred={}; try{ cred=JSON.parse(localStorage.getItem(CRED_KEY)||"{}"); }catch(e){}
+  if(!cred.e) return;
+  postGAS({action:"costUpsert",email:cred.e,pass:cred.p,key:row.key,clearCost:true},2)
     .then(function(){ refreshKeieiGross(); }).catch(function(){});
 }
 // EC手数料率の更新→再取得して再描画
